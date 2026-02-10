@@ -23,7 +23,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
   const [expression, setExpression] = useState<Expression>('HAPPY');
   const [exerciseType, setExerciseType] = useState<ExerciseType>('LIFT');
 
-  // Fix: Move isMoving to component scope so it's accessible in both renderPandaSVG and the main return.
   const isMoving = isWalking || isRunning;
 
   const currentTask = useMemo(() => {
@@ -50,7 +49,7 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     }
   }, [currentTask, isWalking, isDragging, isFallen, isRunning, setPandaState, pandaState]);
 
-  // Auto-recovery from fall when a task starts or after 8 seconds
+  // Auto-recovery from fall
   useEffect(() => {
     if (currentTask && isFallen) {
       setIsFallen(false);
@@ -59,7 +58,7 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     }
   }, [currentTask, isFallen]);
 
-  // Exercise Rotation Logic: 10 seconds per routine
+  // Exercise Rotation Logic
   useEffect(() => {
     if (pandaState !== 'EXERCISING' || isFallen || isRunning) return;
     const types: ExerciseType[] = ['LIFT', 'STRETCH', 'JOG'];
@@ -71,7 +70,7 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     return () => clearInterval(interval);
   }, [pandaState, exerciseType, isFallen, isRunning]);
 
-  // Random Expressions & Idle Animation Twitches
+  // Random Expressions
   useEffect(() => {
     if (isFallen) { setExpression('DIZZY'); return; }
     if (pandaState === 'SLEEPING') { setExpression('SLEEPY'); return; }
@@ -87,7 +86,7 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     return () => clearInterval(interval);
   }, [isFallen, pandaState]);
 
-  // Wandering Logic (Wander when idle)
+  // Wandering Logic
   useEffect(() => {
     if (staticPosition || isDragging || isFallen || isRunning || pandaState === 'SLEEPING' || userPlaced || pandaState !== 'IDLE') return;
     const wander = () => {
@@ -113,7 +112,7 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
           if (isRunning) {
             setIsRunning(false);
             setIsFallen(true);
-            return { x: current.x, y: 92 }; // Fall to nav area
+            return { x: current.x, y: 92 }; 
           }
           setIsWalking(false);
           return current;
@@ -126,15 +125,11 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
 
   const handlePandaClick = () => {
     if (isFallen || isRunning || isDragging || staticPosition) return;
-    
-    // Trigger "Run and Fall"
     setIsRunning(true);
     setIsWalking(false);
     const nearestX = pos.x < 50 ? 8 : 92;
     setFacingLeft(nearestX < pos.x);
     setTargetPos({ x: nearestX, y: pos.y });
-
-    // Auto recovery after time if no task
     setTimeout(() => {
       if (!currentTask) {
         setIsFallen(false);
@@ -163,9 +158,19 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
   const pandaSize = size === 'small' ? 'w-24 h-24' : 'w-64 h-64';
 
   const renderPandaSVG = () => {
-    // Fix: Using isMoving from outer scope.
     const limbL = isRunning ? 'ani-run-l' : (isWalking ? 'ani-walk-l' : '');
     const limbR = isRunning ? 'ani-run-r' : (isWalking ? 'ani-walk-r' : '');
+
+    const Ears = ({ scale = 1 }) => (
+      <g transform={`scale(${scale})`}>
+        <g className="ani-ear" style={{ transformOrigin: '-55px -35px' }}>
+          <circle cx="-55" cy="-35" r="28" fill="#1C1B1F" />
+        </g>
+        <g className="ani-ear" style={{ transformOrigin: '55px -35px', animationDelay: '1s' }}>
+          <circle cx="55" cy="-35" r="28" fill="#1C1B1F" />
+        </g>
+      </g>
+    );
 
     return (
       <svg viewBox="0 0 400 400" className="w-full h-full overflow-visible">
@@ -183,7 +188,7 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
             @keyframes zzz-float { 0% { transform: translate(0,0) scale(0.6); opacity: 0; } 50% { opacity: 1; } 100% { transform: translate(35px, -70px) scale(1.3); opacity: 0; } }
             @keyframes head-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
             @keyframes star-orbit { 0% { transform: rotate(0deg) translateX(50px) rotate(0deg); } 100% { transform: rotate(360deg) translateX(50px) rotate(-360deg); } }
-            @keyframes ear-wiggle { 0%, 90%, 100% { transform: rotate(0); } 95% { transform: rotate(-10deg); } }
+            @keyframes ear-wiggle { 0%, 90%, 100% { transform: rotate(0); } 95% { transform: rotate(-8deg); } }
             
             .ani-idle { animation: idle-sway 4s infinite ease-in-out; }
             .ani-breathe { animation: breathe 3s infinite ease-in-out; transform-origin: center; }
@@ -197,24 +202,11 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
             .ani-zzz { animation: zzz-float 4s infinite linear; }
             .ani-spin { animation: head-spin 1.2s infinite linear; }
             .ani-star { animation: star-orbit 2s infinite linear; }
-            .ani-ear { animation: ear-wiggle 5s infinite ease-in-out; transform-origin: center bottom; }
+            .ani-ear { animation: ear-wiggle 6s infinite ease-in-out; }
           `}
         </style>
 
-        {/* Ears: Larger and more stable */}
-        {!isFallen && (
-          <g transform="translate(200, 150)">
-            <g className="ani-ear">
-               <circle cx="-55" cy="-95" r="28" fill="#1C1B1F" />
-            </g>
-            <g className="ani-ear" style={{ animationDelay: '1s' }}>
-               <circle cx="55" cy="-95" r="28" fill="#1C1B1F" />
-            </g>
-          </g>
-        )}
-
         {isFallen ? (
-          /* Fallen state: Body on ground, spinning head */
           <g transform="translate(200, 250)">
             <g className="ani-star"><path d="M 0,-10 L 3,-3 L 10,-3 L 4,2 L 6,10 L 0,5 L -6,10 L -4,2 L -10,-3 L -3,-3 Z" fill="#FFD700" transform="translate(0, -140)"/></g>
             <g className="ani-star" style={{animationDelay: '-1s'}}><path d="M 0,-10 L 3,-3 L 10,-3 L 4,2 L 6,10 L 0,5 L -6,10 L -4,2 L -10,-3 L -3,-3 Z" fill="#FFD700" transform="translate(0, -140)"/></g>
@@ -224,17 +216,18 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
             <ThickPaw cx="-35" cy="-15" rotation={180} />
             <ThickPaw cx="35" cy="-15" rotation={180} />
             <g className="ani-spin" style={{transformOrigin: '0px -65px'}}>
-              <circle cx="0" cy="-65" r="75" fill="#FFFFFF" stroke="#1C1B1F" strokeWidth="7" />
-              <Face expression="DIZZY" />
+              {/* Ears attached to head circle */}
+              <g transform="translate(0, -65)">
+                <Ears scale={1} />
+                <circle cx="0" cy="0" r="75" fill="#FFFFFF" stroke="#1C1B1F" strokeWidth="7" />
+                <Face expression="DIZZY" offset={0} />
+              </g>
             </g>
           </g>
         ) : (
           <g transform="translate(200, 150)" className={isMoving ? '' : 'ani-idle'}>
             <g className="ani-breathe">
-              {/* Body */}
               <ellipse cx="0" cy="35" rx="85" ry="95" fill="#FFFFFF" stroke="#1C1B1F" strokeWidth="7" />
-              
-              {/* Specialized Limbs */}
               {pandaState === 'MEDITATING' ? (
                 <g>
                    <ThickPaw cx="-75" cy="90" rotation={90} />
@@ -258,7 +251,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
                        <ThickPaw cx="110" cy="35" rotation={55} />
                     </g>
                   ) : (
-                    /* Jogging */
                     <g>
                        <ThickPaw cx="-55" cy="100" aniClass="ani-walk-l" />
                        <ThickPaw cx="55" cy="100" aniClass="ani-walk-r" />
@@ -301,9 +293,12 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
               )}
             </g>
 
-            {/* Head */}
-            <circle cx="0" cy="-60" r="75" fill="#FFFFFF" stroke="#1C1B1F" strokeWidth="7" />
-            <Face expression={expression} />
+            {/* Head group: Ears + Circle + Face */}
+            <g transform="translate(0, -60)">
+              <Ears />
+              <circle cx="0" cy="0" r="75" fill="#FFFFFF" stroke="#1C1B1F" strokeWidth="7" />
+              <Face expression={expression} offset={0} />
+            </g>
           </g>
         )}
       </svg>
@@ -344,11 +339,11 @@ const ThickPaw = ({ cx, cy, rotation = 0, aniClass = '' }: any) => (
   </g>
 );
 
-const Face = ({ expression }: { expression: Expression }) => {
+const Face = ({ expression, offset = 0 }: { expression: Expression, offset?: number }) => {
   return (
-    <g transform="translate(0, -55)">
+    <g transform={`translate(0, ${5 + offset})`}>
       {expression === 'DIZZY' || expression === 'SHOCKED' ? (
-         <g>
+         <g transform="translate(0, -5)">
             <path d="M -25,-12 L -10,2 M -25,2 L -10,-12" stroke="#1C1B1F" strokeWidth="5" strokeLinecap="round" />
             <path d="M 10,-12 L 25,2 M 10,2 L 25,-12" stroke="#1C1B1F" strokeWidth="5" strokeLinecap="round" />
             {expression === 'SHOCKED' ? (
@@ -358,13 +353,13 @@ const Face = ({ expression }: { expression: Expression }) => {
             )}
          </g>
       ) : expression === 'SLEEPY' ? (
-         <g>
+         <g transform="translate(0, -5)">
             <path d="M -35,-8 Q -20,8 -10,-8" fill="none" stroke="#1C1B1F" strokeWidth="5" strokeLinecap="round" />
             <path d="M 10,-8 Q 20,8 35,-8" fill="none" stroke="#1C1B1F" strokeWidth="5" strokeLinecap="round" />
             <path d="M -18,22 Q 0,32 18,22" fill="none" stroke="#1C1B1F" strokeWidth="4" opacity="0.4" />
          </g>
       ) : (
-         <g>
+         <g transform="translate(0, -5)">
             {expression === 'BLINK' ? (
               <><line x1="-35" y1="-5" x2="-15" y2="-5" stroke="#1C1B1F" strokeWidth="6" strokeLinecap="round" /><line x1="15" y1="-5" x2="35" y2="-5" stroke="#1C1B1F" strokeWidth="6" strokeLinecap="round" /></>
             ) : (
