@@ -1,12 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
-import { Check, Droplets, Zap, Target, Pill, Clock, ListTodo, RefreshCw, ChevronRight, HardDrive } from 'lucide-react';
+import { Check, Droplets, Zap, Target, Pill, Clock, ListTodo, RefreshCw, ChevronRight, HardDrive, ShieldCheck, Calendar } from 'lucide-react';
 import { useApp } from '../state';
 import { CATEGORY_COLORS, CategoryType, Tab } from '../types';
 
 const HomeTab: React.FC = () => {
-  const { tasks, addTask, addMedicineSchedule, toggleTask, hydration, setHydration, setActiveTab, userName, sleepConfig, userLocation } = useApp();
+  const { tasks, addTask, addMedicineSchedule, toggleTask, hydration, setHydration, setActiveTab, userName, sleepConfig } = useApp();
   const [fastTask, setFastTask] = useState('');
   const [fastCategory, setFastCategory] = useState<CategoryType>('Mind');
 
@@ -92,22 +92,24 @@ const HomeTab: React.FC = () => {
     if (!medName.trim()) return;
     addMedicineSchedule(medName, medTime, medDays);
     setMedName('');
-    alert("Medicine schedule deployed to local device base!");
+    alert("Medicine Protocol Deployed! Alarms active.");
   };
 
   return (
     <div className="tab-content h-full overflow-y-auto no-scrollbar px-4 space-y-6 pb-24">
       <div className="pt-4 flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-black text-[#1C1B1F] tracking-tight">Focus, {userName}</h1>
-          <p className="text-sm font-bold text-[#49454F] opacity-70">Today is {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={20} className="text-emerald-500" />
+            <h1 className="text-3xl font-black text-[#1C1B1F] tracking-tight">Welcome, {userName}</h1>
+          </div>
+          <p className="text-sm font-bold text-[#49454F] opacity-70">Vault Status: Optimized</p>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-green-50 rounded-full border border-green-100">
-            <HardDrive size={12} className="text-green-600" />
-            <span className="text-[9px] font-black text-green-700 uppercase">Local Base: {userLocation}</span>
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">
+            <HardDrive size={12} className="text-emerald-600" />
+            <span className="text-[9px] font-black text-emerald-700 uppercase">Secured</span>
           </div>
-          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Auto-Fetching Data</p>
         </div>
       </div>
 
@@ -127,7 +129,7 @@ const HomeTab: React.FC = () => {
         </div>
       )}
 
-      {/* Today's Agenda - Chronological To-Do List */}
+      {/* Today's Agenda */}
       <div className="m3-card p-6 bg-white shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2">
@@ -147,7 +149,6 @@ const HomeTab: React.FC = () => {
                   <h5 className={`font-black text-[13px] truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>{task.name}</h5>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[9px] font-black text-gray-400 uppercase flex items-center gap-1"><Clock size={10} /> {new Date(task.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    {task.isSpacedRepetition && <span className="bg-indigo-50 text-indigo-600 text-[8px] font-black px-1.5 py-0.5 rounded-md">SPACED</span>}
                   </div>
                 </div>
                 <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${task.completed ? 'bg-green-500 border-green-500 text-white' : 'border-gray-200'}`}>
@@ -162,6 +163,48 @@ const HomeTab: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Medicine Protocol restore */}
+      <div className="bg-red-50 p-6 rounded-[2.5rem] border border-red-100">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Pill size={20} className="text-red-600" />
+            <h4 className="font-black text-red-900">Medicine Protocol</h4>
+          </div>
+          <span className="text-[8px] font-black text-red-500 bg-red-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Alarm Active</span>
+        </div>
+        <form onSubmit={handleMedSchedule} className="space-y-3">
+          <input 
+            type="text" 
+            value={medName} 
+            onChange={(e) => setMedName(e.target.value)} 
+            placeholder="Medicine Name..." 
+            className="w-full bg-white px-5 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-900 shadow-sm"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative">
+              <Clock size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-red-300" />
+              <input 
+                type="time" 
+                value={medTime} 
+                onChange={(e) => setMedTime(e.target.value)} 
+                className="w-full bg-white pl-10 pr-4 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-800 text-xs" 
+              />
+            </div>
+            <div className="relative">
+              <Calendar size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-red-300" />
+              <input 
+                type="number" 
+                value={medDays} 
+                onChange={(e) => setMedDays(parseInt(e.target.value))} 
+                placeholder="Days"
+                className="w-full bg-white pl-10 pr-4 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-800 text-xs" 
+              />
+            </div>
+          </div>
+          <button type="submit" className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-xs shadow-lg shadow-red-100 active:scale-95 transition-all">DEPLOY SCHEDULE</button>
+        </form>
       </div>
 
       {/* Composition Chart */}
@@ -181,28 +224,6 @@ const HomeTab: React.FC = () => {
             </PieChart>
           </ResponsiveContainer>
         </div>
-      </div>
-
-      {/* Medicine Kit Section */}
-      <div className="m3-card p-6 bg-white border-2 border-red-50">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 bg-red-100 rounded-xl text-red-500"><Pill size={20} /></div>
-          <h4 className="font-black text-[#1C1B1F]">Medical Arsenal</h4>
-        </div>
-        <form onSubmit={handleMedSchedule} className="space-y-4">
-          <input type="text" value={medName} onChange={(e) => setMedName(e.target.value)} placeholder="Medicine/Supplement Name" className="w-full bg-gray-50 px-5 py-4 rounded-2xl outline-none border border-gray-100 font-bold text-sm focus:ring-4 focus:ring-red-50" />
-          <div className="grid grid-cols-2 gap-3">
-             <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Time</label>
-                <input type="time" value={medTime} onChange={(e) => setMedTime(e.target.value)} className="w-full bg-gray-50 px-4 py-4 rounded-2xl border border-gray-100 font-bold text-sm" />
-             </div>
-             <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Days</label>
-                <input type="number" min="1" max="30" value={medDays} onChange={(e) => setMedDays(parseInt(e.target.value))} className="w-full bg-gray-50 px-4 py-4 rounded-2xl border border-gray-100 font-bold text-sm" />
-             </div>
-          </div>
-          <button type="submit" className="w-full bg-red-500 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-red-100 active:scale-95 transition-all">DEPLOY SCHEDULE</button>
-        </form>
       </div>
 
       {/* Instant Mission */}

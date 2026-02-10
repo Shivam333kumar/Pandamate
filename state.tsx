@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Task, UserStats, CategoryType, PandaState, Tab, MainTask } from './types';
+import { Task, UserStats, CategoryType, PandaState, Tab, MainTask, UserAccount, UserVaultData } from './types';
 
 interface AppContextType {
   tasks: Task[];
@@ -27,103 +27,102 @@ interface AppContextType {
   schedulerDate: Date;
   setSchedulerDate: (date: Date) => void;
   isInitialized: boolean;
-  initializeProfile: (name: string, location?: string, forceBrowserStorage?: boolean) => Promise<boolean>;
-  changeStorageFolder: () => Promise<void>;
+  currentUser: string | null;
+  login: (username: string, remember: boolean) => Promise<boolean>;
+  signup: (username: string) => Promise<boolean>;
+  logout: () => void;
+  exportData: () => void;
+  importData: (json: string) => Promise<boolean>;
+  clearAllData: () => Promise<void>;
   userLocation: string;
   startDate: string;
-  needsPermission: boolean;
-  requestFileSystemPermission: () => Promise<void>;
   storageType: 'FOLDER' | 'BROWSER' | 'NONE';
   vaultFiles: string[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const DATA_FILENAME = 'panda_vault.json';
 const SPACED_INTERVALS = [1, 3, 7, 11];
 
-// Hardened IndexedDB utility for handle persistence
 const vaultDB = {
   async open(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open('PandaVault', 3);
+      const req = indexedDB.open('PandaVaultAuth', 4);
       req.onupgradeneeded = (e) => {
         const db = req.result;
-        if (!db.objectStoreNames.contains('metadata')) db.createObjectStore('metadata');
-        if (!db.objectStoreNames.contains('data')) db.createObjectStore('data');
+        if (!db.objectStoreNames.contains('users')) db.createObjectStore('users', { keyPath: 'username' });
+        if (!db.objectStoreNames.contains('vaults')) db.createObjectStore('vaults', { keyPath: 'username' });
+        if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions');
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
   },
-  async setHandle(handle: FileSystemDirectoryHandle | string) {
+  async saveUser(user: UserAccount) {
     const db = await this.open();
-    return new Promise((resolve) => {
-      const tx = db.transaction('metadata', 'readwrite');
-      tx.objectStore('metadata').put(handle, 'storage_handle');
-      tx.oncomplete = () => resolve(true);
-    });
+    const tx = db.transaction('users', 'readwrite');
+    tx.objectStore('users').put(user);
+    return new Promise(resolve => tx.oncomplete = () => resolve(true));
   },
-  async getHandle(): Promise<FileSystemDirectoryHandle | string | null> {
+  async getUser(username: string): Promise<UserAccount | null> {
     const db = await this.open();
-    return new Promise((resolve) => {
-      const tx = db.transaction('metadata', 'readonly');
-      const req = tx.objectStore('metadata').get('storage_handle');
-      req.onsuccess = () => resolve(req.result || null);
-    });
+    const tx = db.transaction('users', 'readonly');
+    const req = tx.objectStore('users').get(username);
+    return new Promise(resolve => req.onsuccess = () => resolve(req.result || null));
   },
-  async setBrowserData(data: string) {
+  async saveVault(username: string, data: UserVaultData) {
     const db = await this.open();
-    return new Promise((resolve) => {
-      const tx = db.transaction('data', 'readwrite');
-      tx.objectStore('data').put(data, 'main_vault');
-      tx.oncomplete = () => resolve(true);
-    });
+    const tx = db.transaction('vaults', 'readwrite');
+    tx.objectStore('vaults').put({ username, data });
+    return new Promise(resolve => tx.oncomplete = () => resolve(true));
   },
-  async getBrowserData(): Promise<string | null> {
+  async getVault(username: string): Promise<UserVaultData | null> {
     const db = await this.open();
-    return new Promise((resolve) => {
-      const tx = db.transaction('data', 'readonly');
-      const req = tx.objectStore('data').get('main_vault');
-      req.onsuccess = () => resolve(req.result || null);
-    });
+    const tx = db.transaction('vaults', 'readonly');
+    const req = tx.objectStore('vaults').get(username);
+    return new Promise(resolve => req.onsuccess = () => resolve(req.result?.data || null));
+  },
+  async setSession(username: string | null) {
+    const db = await this.open();
+    const tx = db.transaction('sessions', 'readwrite');
+    if (username) tx.objectStore('sessions').put(username, 'active_user');
+    else tx.objectStore('sessions').delete('active_user');
+    return new Promise(resolve => tx.oncomplete = () => resolve(true));
+  },
+  async getSession(): Promise<string | null> {
+    const db = await this.open();
+    const tx = db.transaction('sessions', 'readonly');
+    const req = tx.objectStore('sessions').get('active_user');
+    return new Promise(resolve => req.onsuccess = () => resolve(req.result || null));
+  },
+  async clearAll() {
+    const db = await this.open();
+    const tx = db.transaction(['users', 'vaults', 'sessions'], 'readwrite');
+    tx.objectStore('users').clear();
+    tx.objectStore('vaults').clear();
+    tx.objectStore('sessions').clear();
+    return new Promise(resolve => tx.oncomplete = () => resolve(true));
   }
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [userName, setUserName] = useState('PandaUser');
-  const [userLocation, setUserLocation] = useState('Unknown Base');
+  const [userName, setUserName] = useState('');
+  const [userLocation, setUserLocation] = useState('Central Base');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [stats, setStats] = useState<UserStats>({ streak: 0, xp: 0, hydrationCount: 0, lastHydrationUpdate: Date.now(), dailyCompletion: {} });
   const [hydration, setHydration] = useState(0);
   const [sleepConfig, setSleepConfig] = useState({ bedtime: "22:00", duration: 8 });
   const [remindersEnabled, setRemindersEnabled] = useState(true);
-  
-  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [storageType, setStorageType] = useState<'FOLDER' | 'BROWSER' | 'NONE'>('NONE');
-  const [needsPermission, setNeedsPermission] = useState(false);
   const [vaultFiles, setVaultFiles] = useState<string[]>([]);
-  
   const [pandaState, setPandaState] = useState<PandaState>('IDLE');
   const [activeTab, setActiveTab] = useState<Tab>(Tab.HOME);
   const [schedulerDate, setSchedulerDate] = useState(new Date());
 
-  const listFiles = useCallback(async (handle: FileSystemDirectoryHandle) => {
-    try {
-      const files: string[] = [];
-      // @ts-ignore
-      for await (const entry of handle.values()) {
-        files.push(entry.name);
-      }
-      setVaultFiles(files);
-    } catch (e) {
-      console.error("Failed to list files:", e);
-    }
-  }, []);
-
-  const applyData = (data: any) => {
+  const applyData = (data: UserVaultData) => {
     setUserName(data.userName || 'PandaUser');
     setUserLocation(data.userLocation || 'Unknown Base');
     setStartDate(data.startDate || new Date().toISOString().split('T')[0]);
@@ -132,27 +131,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHydration(data.hydration || 0);
     setSleepConfig(data.sleepConfig || { bedtime: "22:00", duration: 8 });
     setRemindersEnabled(data.remindersEnabled !== undefined ? data.remindersEnabled : true);
+  };
+
+  const loadUserData = async (username: string) => {
+    const data = await vaultDB.getVault(username);
+    if (data) {
+      applyData(data);
+    } else {
+      const defaultData: UserVaultData = {
+        userName: username,
+        userLocation: 'Base Alpha',
+        startDate: new Date().toISOString().split('T')[0],
+        tasks: [],
+        stats: { streak: 0, xp: 0, hydrationCount: 0, lastHydrationUpdate: Date.now(), dailyCompletion: {} },
+        hydration: 0,
+        sleepConfig: { bedtime: "22:00", duration: 8 },
+        remindersEnabled: true
+      };
+      applyData(defaultData);
+      await vaultDB.saveVault(username, defaultData);
+    }
+    setStorageType('BROWSER');
+    setVaultFiles(['[Encrypted IndexedDB]']);
     setIsInitialized(true);
   };
 
-  const loadFromFile = async (handle: FileSystemDirectoryHandle) => {
-    try {
-      const fileHandle = await handle.getFileHandle(DATA_FILENAME, { create: true });
-      const file = await fileHandle.getFile();
-      const text = await file.text();
-      if (text) {
-        applyData(JSON.parse(text));
-      }
-      await listFiles(handle);
-      return true;
-    } catch (e) {
-      console.error("Failed to load from file:", e);
-      return false;
-    }
-  };
-
   const saveToDisk = useCallback(async () => {
-    const dataToSave = {
+    if (!currentUser || !isInitialized) return;
+    const dataToSave: UserVaultData = {
       userName,
       userLocation,
       startDate,
@@ -162,50 +168,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sleepConfig,
       remindersEnabled
     };
-    const payload = JSON.stringify(dataToSave);
-
-    if (storageType === 'FOLDER' && dirHandle) {
-      try {
-        // @ts-ignore
-        const status = await dirHandle.queryPermission({ mode: 'readwrite' });
-        if (status !== 'granted') return;
-        const fileHandle = await dirHandle.getFileHandle(DATA_FILENAME, { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(payload);
-        await writable.close();
-        await listFiles(dirHandle);
-      } catch (e) {
-        console.error("Folder save failed:", e);
-      }
-    } else if (storageType === 'BROWSER') {
-      await vaultDB.setBrowserData(payload);
-      setVaultFiles(['[Internal IndexedDB]']);
-    }
-  }, [dirHandle, storageType, userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled, listFiles]);
+    await vaultDB.saveVault(currentUser, dataToSave);
+  }, [currentUser, isInitialized, userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled]);
 
   useEffect(() => {
     const boot = async () => {
-      try {
-        const saved = await vaultDB.getHandle();
-        if (saved === 'BROWSER_VAULT') {
-          setStorageType('BROWSER');
-          const data = await vaultDB.getBrowserData();
-          if (data) applyData(JSON.parse(data));
-          else setIsInitialized(false);
-        } else if (saved && typeof saved !== 'string') {
-          const handle = saved as FileSystemDirectoryHandle;
-          setDirHandle(handle);
-          setStorageType('FOLDER');
-          // @ts-ignore
-          const status = await handle.queryPermission({ mode: 'readwrite' });
-          if (status === 'granted') {
-            await loadFromFile(handle);
-          } else {
-            setNeedsPermission(true);
-          }
-        }
-      } catch (e) {
-        console.error("Boot error:", e);
+      const activeUser = await vaultDB.getSession();
+      if (activeUser) {
+        setCurrentUser(activeUser);
+        await loadUserData(activeUser);
       }
     };
     boot();
@@ -218,67 +189,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [isInitialized, tasks, stats, hydration, sleepConfig, remindersEnabled, saveToDisk]);
 
-  const requestFileSystemPermission = async () => {
-    if (!dirHandle) return;
-    try {
-      // @ts-ignore
-      const status = await dirHandle.requestPermission({ mode: 'readwrite' });
-      if (status === 'granted') {
-        setNeedsPermission(false);
-        await loadFromFile(dirHandle);
-      }
-    } catch (e) {
-      console.error("Permission request failed:", e);
-    }
+  const signup = async (username: string): Promise<boolean> => {
+    const existing = await vaultDB.getUser(username);
+    if (existing) return false;
+    const newUser: UserAccount = {
+      username,
+      createdAt: new Date().toISOString()
+    };
+    await vaultDB.saveUser(newUser);
+    return login(username, true);
   };
 
-  const changeStorageFolder = async () => {
-    try {
-      // @ts-ignore
-      const handle = await window.showDirectoryPicker();
-      await vaultDB.setHandle(handle);
-      setDirHandle(handle);
-      setStorageType('FOLDER');
-      await saveToDisk();
-      alert(`Vault successfully migrated to ${handle.name}`);
-    } catch (e) {
-      console.error("Migration failed:", e);
-    }
+  const login = async (username: string, remember: boolean): Promise<boolean> => {
+    const user = await vaultDB.getUser(username);
+    if (!user) return false;
+    
+    setCurrentUser(username);
+    if (remember) await vaultDB.setSession(username);
+    await loadUserData(username);
+    return true;
   };
 
-  const initializeProfile = async (name: string, location?: string, forceBrowserStorage?: boolean): Promise<boolean> => {
+  const logout = () => {
+    vaultDB.setSession(null);
+    setCurrentUser(null);
+    setIsInitialized(false);
+    setActiveTab(Tab.HOME);
+  };
+
+  const exportData = () => {
+    if (!currentUser) return;
+    const dataToSave = {
+      userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled
+    };
+    const blob = new Blob([JSON.stringify(dataToSave, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `panda_mate_${currentUser}_backup.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importData = async (json: string): Promise<boolean> => {
     try {
-      if (forceBrowserStorage) {
-        await vaultDB.setHandle('BROWSER_VAULT');
-        setStorageType('BROWSER');
-      } else {
-        let handle;
-        try {
-          // @ts-ignore
-          handle = await window.showDirectoryPicker();
-        } catch (pickerError: any) {
-          if (pickerError.name === 'SecurityError' || pickerError.message?.includes('Cross origin')) {
-            throw new Error('BROWSER_RESTRICTED');
-          }
-          throw pickerError;
-        }
-        await vaultDB.setHandle(handle);
-        setDirHandle(handle);
-        setStorageType('FOLDER');
+      const data = JSON.parse(json);
+      applyData(data);
+      if (currentUser) {
+        await vaultDB.saveVault(currentUser, data);
       }
-      
-      const today = new Date().toISOString().split('T')[0];
-      setUserName(name);
-      setStartDate(today);
-      if (location) setUserLocation(location);
-      setIsInitialized(true);
-      
-      setTimeout(() => saveToDisk(), 100);
       return true;
-    } catch (e: any) {
-      if (e.message === 'BROWSER_RESTRICTED') throw e;
-      console.error("Initialization error:", e);
+    } catch (e) {
+      console.error("Import failed:", e);
       return false;
+    }
+  };
+
+  const clearAllData = async () => {
+    if (confirm("This will permanently delete ALL users and data on this device. Continue?")) {
+      await vaultDB.clearAll();
+      window.location.reload();
     }
   };
 
@@ -396,8 +366,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       stats, addXP, pandaState, setPandaState, activeTab, setActiveTab,
       hydration, setHydration, sleepConfig, setSleepConfig,
       userName, setUserName, remindersEnabled, setRemindersEnabled,
-      schedulerDate, setSchedulerDate, setMainTask, isInitialized, initializeProfile, changeStorageFolder, userLocation, startDate,
-      needsPermission, requestFileSystemPermission, storageType, vaultFiles
+      schedulerDate, setSchedulerDate, setMainTask, isInitialized,
+      currentUser, login, signup, logout, exportData, importData, clearAllData,
+      userLocation, startDate, storageType, vaultFiles
     }}>
       {children}
     </AppContext.Provider>

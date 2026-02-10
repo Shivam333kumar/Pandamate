@@ -14,8 +14,8 @@ export interface Task {
   durationMinutes: number;
   completed: boolean;
   isSpacedRepetition?: boolean;
-  isQuick?: boolean; // Highlighted red and inserted at current time
-  isMedicine?: boolean; // Cannot be replaced or displaced
+  isQuick?: boolean; 
+  isMedicine?: boolean; 
   repetitionStep?: number;
 }
 
@@ -47,3 +47,19 @@ export const CATEGORY_COLORS: Record<CategoryType, string> = {
   Break: '#F6AD55',
   Medicine: '#EF4444'
 };
+
+export interface UserAccount {
+  username: string;
+  createdAt: string;
+}
+
+export interface UserVaultData {
+  userName: string;
+  userLocation: string;
+  startDate: string;
+  tasks: Task[];
+  stats: UserStats;
+  hydration: number;
+  sleepConfig: { bedtime: string; duration: number };
+  remindersEnabled: boolean;
+}

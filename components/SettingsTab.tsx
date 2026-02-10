@@ -1,11 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
-import { Moon, Clock, Palette, Bell, User, Zap, Key, ExternalLink, ShieldCheck, WifiOff, Globe, FolderCheck, Database, RefreshCcw, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Moon, Clock, Palette, Bell, User, Zap, Key, ExternalLink, ShieldCheck, LogOut, Download, Upload, Trash2, Database, RefreshCcw, FileText } from 'lucide-react';
 import { useApp } from '../state';
 
 const SettingsTab: React.FC = () => {
-  const { sleepConfig, setSleepConfig, userName, setUserName, remindersEnabled, setRemindersEnabled, userLocation, storageType, vaultFiles, changeStorageFolder } = useApp();
+  const { 
+    sleepConfig, setSleepConfig, userName, setUserName, 
+    remindersEnabled, setRemindersEnabled, userLocation, 
+    storageType, vaultFiles, logout, exportData, importData, clearAllData 
+  } = useApp();
+  
   const [hasKey, setHasKey] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const checkKey = async () => {
@@ -31,51 +37,77 @@ const SettingsTab: React.FC = () => {
     }
   };
 
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const content = event.target?.result as string;
+      const success = await importData(content);
+      if (success) alert("Vault data imported successfully!");
+      else alert("Import failed. Invalid file format.");
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="tab-content h-full overflow-y-auto no-scrollbar px-4 space-y-6 pb-24">
       <div className="text-center pt-4">
         <h2 className="text-3xl font-black text-emerald-900 tracking-tight">System Settings</h2>
-        <p className="text-[10px] font-bold text-emerald-700/40 uppercase tracking-[0.2em] mt-1">Vault Mode 3.0 Stable</p>
+        <p className="text-[10px] font-bold text-emerald-700/40 uppercase tracking-[0.2em] mt-1">Multi-User Vault V3</p>
+      </div>
+
+      {/* User Actions Bar */}
+      <div className="flex gap-2">
+        <button 
+          onClick={logout}
+          className="flex-1 bg-white border border-red-100 text-red-600 py-4 rounded-3xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all"
+        >
+          <LogOut size={16} /> Secure Logout
+        </button>
       </div>
 
       {/* Vault Connectivity Badge */}
       <div className={`p-6 rounded-[2.5rem] border flex flex-col gap-4 ${storageType === 'FOLDER' ? 'bg-white/40 border-white' : 'bg-emerald-50/50 border-emerald-100'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {storageType === 'FOLDER' ? <FolderCheck size={20} className="text-emerald-600" /> : <Database size={20} className="text-emerald-600" />}
+            <Database size={20} className="text-emerald-600" />
             <div>
-              <span className={`text-[11px] font-black uppercase tracking-widest block ${storageType === 'FOLDER' ? 'text-emerald-900' : 'text-emerald-900'}`}>
-                {storageType === 'FOLDER' ? 'Directory Vault Active' : 'Browser Vault Active'}
+              <span className="text-[11px] font-black uppercase tracking-widest block text-emerald-900">
+                Encrypted Local Vault
               </span>
               <span className="text-[9px] font-bold text-emerald-700/40 uppercase">
-                Base: {userLocation}
+                Username: {userName}
               </span>
             </div>
           </div>
           <ShieldCheck size={24} className="text-emerald-500" />
         </div>
 
-        {/* Vault Explorer */}
-        <div className="bg-white/40 rounded-2xl p-4 border border-white/50 space-y-3">
-          <div className="flex items-center gap-2">
-            <FileText size={14} className="text-emerald-600" />
-            <span className="text-[9px] font-black text-emerald-800 uppercase tracking-widest">Vault Integrity</span>
-          </div>
-          <div className="space-y-1.5">
-            {vaultFiles.map((file, idx) => (
-              <div key={idx} className="flex items-center justify-between bg-white/60 px-3 py-2 rounded-xl border border-white/50">
-                 <span className="text-[10px] font-bold text-gray-600">{file}</span>
-                 <span className="text-[8px] font-black text-emerald-500 uppercase">Synced</span>
-              </div>
-            ))}
-          </div>
+        {/* Data Utilities */}
+        <div className="grid grid-cols-2 gap-3">
+           <button 
+             onClick={exportData}
+             className="bg-white/60 p-4 rounded-2xl border border-white flex flex-col items-center gap-2 hover:bg-white transition-colors group"
+           >
+             <Download size={20} className="text-indigo-600 group-hover:scale-110 transition-transform" />
+             <span className="text-[9px] font-black text-indigo-900 uppercase">Export JSON</span>
+           </button>
+           <button 
+             onClick={() => fileInputRef.current?.click()}
+             className="bg-white/60 p-4 rounded-2xl border border-white flex flex-col items-center gap-2 hover:bg-white transition-colors group"
+           >
+             <Upload size={20} className="text-emerald-600 group-hover:scale-110 transition-transform" />
+             <span className="text-[9px] font-black text-emerald-900 uppercase">Import JSON</span>
+           </button>
+           <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={onFileChange} />
         </div>
 
         <button 
-          onClick={changeStorageFolder}
-          className="w-full flex items-center justify-center gap-2 bg-emerald-100 text-emerald-900 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-200 transition-colors"
+          onClick={clearAllData}
+          className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-600 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-colors"
         >
-          <RefreshCcw size={14} /> Relocate Mission Vault
+          <Trash2 size={14} /> Clear All Device Data
         </button>
       </div>
 
@@ -83,10 +115,10 @@ const SettingsTab: React.FC = () => {
         {/* Profile Section */}
         <div className="space-y-4">
           <h3 className="font-black text-emerald-900 flex items-center gap-2 text-sm">
-            <User size={18} className="text-emerald-600" /> User Profile
+            <User size={18} className="text-emerald-600" /> Identity
           </h3>
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-emerald-800/40 uppercase tracking-[0.2em] ml-2">Identity Name</label>
+            <label className="text-[9px] font-black text-emerald-800/40 uppercase tracking-[0.2em] ml-2">Display Name</label>
             <input 
               type="text" 
               value={userName}
@@ -104,9 +136,6 @@ const SettingsTab: React.FC = () => {
             </div>
           </h3>
           <div className="bg-white/40 p-5 rounded-3xl border border-white space-y-4">
-            <p className="text-[10px] font-bold text-emerald-900/40 leading-relaxed uppercase tracking-tighter">
-              Optional: Connect a paid Gemini API key to unlock personalized AI conversations with Sensei.
-            </p>
             <button 
               onClick={handleOpenKeySelector}
               className={`w-full py-4 rounded-2xl font-black text-xs transition-all flex items-center justify-center gap-2 ${
@@ -140,17 +169,15 @@ const SettingsTab: React.FC = () => {
                 <label className="text-[9px] font-black text-emerald-800/40 uppercase tracking-[0.2em]">Target Rest</label>
                 <span className="text-xs font-black text-teal-600">{sleepConfig.duration} HOURS</span>
               </div>
-              <div className="flex items-center gap-4 bg-white/60 p-2 rounded-2xl shadow-sm border border-white">
-                <input 
-                  type="range" 
-                  min="4" 
-                  max="12" 
-                  step="0.5"
-                  value={sleepConfig.duration}
-                  onChange={(e) => setSleepConfig(p => ({ ...p, duration: parseFloat(e.target.value) }))}
-                  className="flex-1 h-2 bg-emerald-100 rounded-full appearance-none cursor-pointer accent-emerald-600"
-                />
-              </div>
+              <input 
+                type="range" 
+                min="4" 
+                max="12" 
+                step="0.5"
+                value={sleepConfig.duration}
+                onChange={(e) => setSleepConfig(p => ({ ...p, duration: parseFloat(e.target.value) }))}
+                className="w-full h-2 bg-emerald-100 rounded-full appearance-none cursor-pointer accent-emerald-600"
+              />
             </div>
           </div>
         </div>
@@ -163,11 +190,10 @@ const SettingsTab: React.FC = () => {
           >
             <div className="flex items-center gap-4">
               <div className={`p-2 rounded-xl ${remindersEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
-                <Bell size={18} className={remindersEnabled ? 'animate-ring' : ''} />
+                <Bell size={18} />
               </div>
               <div className="text-left">
                 <span className={`text-sm font-black block ${remindersEnabled ? 'text-emerald-900' : 'text-gray-700'}`}>Smart Alerts</span>
-                <span className="text-[9px] font-bold text-emerald-700/40 uppercase">System Push Notifications</span>
               </div>
             </div>
             <div className={`w-12 h-6 rounded-full p-1 transition-colors ${remindersEnabled ? 'bg-emerald-500' : 'bg-gray-300'}`}>
@@ -177,14 +203,9 @@ const SettingsTab: React.FC = () => {
         </div>
       </div>
       
-      <div className="p-6 bg-emerald-50/30 rounded-[2.5rem] border border-emerald-100/50 mb-10">
-         <h4 className="text-[10px] font-black text-emerald-700 mb-2 flex items-center gap-2 uppercase tracking-widest">
-           <Zap size={14} /> Vault Encryption
-         </h4>
-         <p className="text-[11px] font-bold text-emerald-800 leading-relaxed">
-           {storageType === 'FOLDER' 
-             ? 'Your profile is synchronized with a physical folder on this device. Data is compressed for performance.' 
-             : 'Folder access is restricted; your profile is secured in the Browser Vault (IndexedDB). Data remains local to this device.'}
+      <div className="p-6 bg-emerald-50/30 rounded-[2.5rem] border border-emerald-100/50 mb-10 text-center">
+         <p className="text-[11px] font-bold text-emerald-800 leading-relaxed uppercase tracking-tighter">
+           Local Multi-User Encryption Protocol Active.<br/>Data stays on this device.
          </p>
       </div>
     </div>
