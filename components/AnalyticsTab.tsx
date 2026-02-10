@@ -6,8 +6,7 @@ import { useApp } from '../state';
 import { Tab } from '../types';
 
 const AnalyticsTab: React.FC = () => {
-  const { stats, setActiveTab, setSchedulerDate, setMainTask } = useApp();
-  const [viewDate, setViewDate] = useState(new Date());
+  const { stats, setActiveTab, setSchedulerDate, setMainTask, startDate } = useApp();
   const [isEditingMain, setIsEditingMain] = useState(false);
   const [mainName, setMainName] = useState(stats.mainTask?.name || '');
   const [mainDate, setMainDate] = useState(stats.mainTask?.targetDate || '');
@@ -20,25 +19,45 @@ const AnalyticsTab: React.FC = () => {
 
   const fullYearLog = useMemo(() => {
     const days = [];
+    const start = new Date(startDate);
     const now = new Date();
-    const start = new Date(now);
-    start.setDate(now.getDate() - 364);
+    
+    // We want a 365-day log, but starting from Day 1 (the start date)
+    // If the start date was more than 365 days ago, we show the last 365.
+    // Otherwise, we show from Day 1 to at least Today.
+    let displayStart = new Date(start);
+    const diffTime = Math.abs(now.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 365) {
+      displayStart = new Date(now);
+      displayStart.setDate(now.getDate() - 364);
+    }
 
-    let counter = 1;
-    for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
+    // Always ensure we have at least 365 slots to maintain the "Galaxy" look
+    const totalDaysToShow = Math.max(365, diffDays + 7); 
+    const logStart = new Date(displayStart);
+
+    for (let i = 0; i < totalDaysToShow; i++) {
+      const d = new Date(logStart);
+      d.setDate(logStart.getDate() + i);
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const percentage = stats.dailyCompletion[iso] ?? 0;
+      
+      // Calculate day index relative to the absolute start date
+      const relativeDayIndex = Math.floor((d.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
       days.push({ 
         iso, 
         percentage, 
         dateObj: new Date(d),
-        dayIndex: counter++, 
-        month: d.toLocaleDateString('en-US', { month: 'short' }),
-        isToday: iso === todayStr
+        dayIndex: relativeDayIndex,
+        isToday: iso === todayStr,
+        isFuture: d > now
       });
     }
     return days;
-  }, [stats.dailyCompletion, todayStr]);
+  }, [stats.dailyCompletion, todayStr, startDate]);
 
   const daysRemaining = useMemo(() => {
     if (!stats.mainTask?.targetDate) return null;
@@ -76,7 +95,8 @@ const AnalyticsTab: React.FC = () => {
     return days;
   }, [stats.dailyCompletion]);
 
-  const getMasteryColor = (p: number) => {
+  const getMasteryColor = (p: number, isFuture: boolean) => {
+    if (isFuture) return 'bg-gray-50 text-gray-200 border-gray-100 opacity-30 cursor-not-allowed';
     if (p === 0) return 'bg-gray-100 text-gray-400 border-gray-200';
     if (p === 100) return 'bg-green-500 text-white border-green-600 shadow-sm';
     if (p >= 80) return 'bg-yellow-400 text-white border-yellow-500 shadow-sm';
@@ -85,6 +105,8 @@ const AnalyticsTab: React.FC = () => {
   };
 
   const jumpToDay = (date: Date) => {
+    const now = new Date();
+    if (date > now) return;
     setSchedulerDate(date);
     setActiveTab(Tab.SCHEDULER);
   };
@@ -95,8 +117,6 @@ const AnalyticsTab: React.FC = () => {
       setIsEditingMain(false);
     }
   };
-
-  const currentMomentumLevel = growthData[growthData.length - 1];
 
   return (
     <div className="tab-content h-full overflow-y-auto no-scrollbar px-4 space-y-6 pb-24">
@@ -214,7 +234,7 @@ const AnalyticsTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Galaxy Log Card - Day 1 to 365 */}
+      {/* Galaxy Log Card - Starting from Day 1 */}
       <div className="m3-card p-6 bg-white">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -224,20 +244,21 @@ const AnalyticsTab: React.FC = () => {
             <h3 className="font-bold text-[#1C1B1F] text-sm">Galaxy Log</h3>
           </div>
           <div className="bg-indigo-50 px-3 py-1 rounded-full text-[10px] font-black text-indigo-600 uppercase">
-            365 Day Cycle
+            Lifelong Training
           </div>
         </div>
-        <p className="text-[9px] font-black text-gray-400 uppercase mb-3 text-center tracking-tighter">Tap blocks to inspect missions</p>
+        <p className="text-[9px] font-black text-gray-400 uppercase mb-3 text-center tracking-tighter">Day 1 started on {new Date(startDate).toLocaleDateString()}</p>
         <div className="h-[400px] overflow-y-auto no-scrollbar pr-1 border-t border-gray-50 pt-4">
           <div className="grid grid-cols-7 gap-2">
             {fullYearLog.map((day) => (
               <button 
                 key={day.iso} 
+                disabled={day.isFuture}
                 onClick={() => jumpToDay(day.dateObj)}
-                className={`aspect-square rounded-xl flex flex-col items-center justify-center border transition-all active:scale-90 ${getMasteryColor(day.percentage)} ${day.isToday ? 'ring-4 ring-indigo-400 ring-offset-2' : ''}`}
+                className={`aspect-square rounded-xl flex flex-col items-center justify-center border transition-all active:scale-90 ${getMasteryColor(day.percentage, day.isFuture)} ${day.isToday ? 'ring-4 ring-indigo-400 ring-offset-2' : ''}`}
               >
                 <span className="text-[6px] font-black opacity-40 leading-none mb-1">D{day.dayIndex}</span>
-                <span className="text-[10px] font-black leading-none">{day.percentage}%</span>
+                {!day.isFuture && <span className="text-[10px] font-black leading-none">{day.percentage}%</span>}
               </button>
             ))}
             <div ref={gridEndRef} />

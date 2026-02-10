@@ -34,7 +34,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     });
   }, [tasks]);
 
-  // Sync state with current task
   useEffect(() => {
     if (isFallen || isRunning || isDragging) return;
     if (currentTask) {
@@ -49,7 +48,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     }
   }, [currentTask, isWalking, isDragging, isFallen, isRunning, setPandaState, pandaState]);
 
-  // Auto-recovery from fall
   useEffect(() => {
     if (currentTask && isFallen) {
       setIsFallen(false);
@@ -58,7 +56,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     }
   }, [currentTask, isFallen]);
 
-  // Exercise Rotation Logic
   useEffect(() => {
     if (pandaState !== 'EXERCISING' || isFallen || isRunning) return;
     const types: ExerciseType[] = ['LIFT', 'STRETCH', 'JOG'];
@@ -70,7 +67,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     return () => clearInterval(interval);
   }, [pandaState, exerciseType, isFallen, isRunning]);
 
-  // Random Expressions
   useEffect(() => {
     if (isFallen) { setExpression('DIZZY'); return; }
     if (pandaState === 'SLEEPING') { setExpression('SLEEPY'); return; }
@@ -86,7 +82,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     return () => clearInterval(interval);
   }, [isFallen, pandaState]);
 
-  // Wandering Logic
   useEffect(() => {
     if (staticPosition || isDragging || isFallen || isRunning || pandaState === 'SLEEPING' || userPlaced || pandaState !== 'IDLE') return;
     const wander = () => {
@@ -100,7 +95,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
     return () => clearInterval(interval);
   }, [staticPosition, pos.x, pos.y, pandaState, isDragging, userPlaced, isFallen, isRunning]);
 
-  // Smooth Movement Interpolation
   useEffect(() => {
     if ((!isWalking && !isRunning) || isDragging || isFallen) return;
     const speed = isRunning ? 0.08 : 0.02;
@@ -216,7 +210,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
             <ThickPaw cx="-35" cy="-15" rotation={180} />
             <ThickPaw cx="35" cy="-15" rotation={180} />
             <g className="ani-spin" style={{transformOrigin: '0px -65px'}}>
-              {/* Ears attached to head circle */}
               <g transform="translate(0, -65)">
                 <Ears scale={1} />
                 <circle cx="0" cy="0" r="75" fill="#FFFFFF" stroke="#1C1B1F" strokeWidth="7" />
@@ -293,7 +286,6 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
               )}
             </g>
 
-            {/* Head group: Ears + Circle + Face */}
             <g transform="translate(0, -60)">
               <Ears />
               <circle cx="0" cy="0" r="75" fill="#FFFFFF" stroke="#1C1B1F" strokeWidth="7" />

@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Moon, Clock, Palette, Bell, User, Zap, Key, ExternalLink, ShieldCheck, WifiOff, Globe } from 'lucide-react';
+import { Moon, Clock, Palette, Bell, User, Zap, Key, ExternalLink, ShieldCheck, WifiOff, Globe, FolderCheck } from 'lucide-react';
 import { useApp } from '../state';
 
 const SettingsTab: React.FC = () => {
-  const { sleepConfig, setSleepConfig, userName, setUserName, remindersEnabled, setRemindersEnabled } = useApp();
+  const { sleepConfig, setSleepConfig, userName, setUserName, remindersEnabled, setRemindersEnabled, userLocation } = useApp();
   const [hasKey, setHasKey] = useState(false);
 
   useEffect(() => {
@@ -35,26 +35,42 @@ const SettingsTab: React.FC = () => {
     <div className="tab-content h-full overflow-y-auto no-scrollbar px-4 space-y-6 pb-24">
       <div className="text-center pt-4">
         <h2 className="text-3xl font-black text-gray-800 tracking-tight">System Settings</h2>
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-1">Version 2.0.1 Stable</p>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-1">Vault Mode 3.0 Stable</p>
       </div>
 
-      {/* Connectivity Badge */}
-      <div className={`p-4 rounded-3xl border flex items-center justify-between transition-all ${hasKey ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
+      {/* Vault Connectivity Badge */}
+      <div className={`p-4 rounded-3xl border flex items-center justify-between bg-indigo-50 border-indigo-100`}>
         <div className="flex items-center gap-3">
-          {hasKey ? <Globe size={18} className="text-green-500" /> : <WifiOff size={18} className="text-gray-400" />}
+          <FolderCheck size={18} className="text-indigo-500" />
           <div>
-            <span className={`text-[11px] font-black uppercase tracking-widest block ${hasKey ? 'text-green-600' : 'text-gray-500'}`}>
-              {hasKey ? 'AI Online Mode' : 'Local Offline Mode'}
+            <span className={`text-[11px] font-black uppercase tracking-widest block text-indigo-600`}>
+              Directory Vault Active
             </span>
             <span className="text-[9px] font-bold text-gray-400 uppercase">
-              {hasKey ? 'Unlimited AI Wisdom' : 'Static Wisdom Library'}
+              Base: {userLocation}
             </span>
           </div>
         </div>
-        {hasKey && <ShieldCheck size={20} className="text-green-500" />}
+        <ShieldCheck size={20} className="text-green-500" />
       </div>
 
       <div className="bg-white/40 p-6 rounded-[2.5rem] border border-white/50 shadow-sm space-y-8 transition-all">
+        {/* Profile Section */}
+        <div className="space-y-4">
+          <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+            <User size={18} className="text-blue-500" /> User Profile
+          </h3>
+          <div className="space-y-2">
+            <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Identity Name</label>
+            <input 
+              type="text" 
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              className="w-full bg-white/60 p-4 rounded-2xl border border-gray-100 font-bold text-gray-700 outline-none focus:ring-4 focus:ring-blue-100 transition-all shadow-sm"
+            />
+          </div>
+        </div>
+
         {/* API Key Section */}
         <div className="space-y-4">
           <h3 className="font-black text-gray-700 flex items-center justify-between">
@@ -77,31 +93,7 @@ const SettingsTab: React.FC = () => {
               >
                 <Key size={14} /> {hasKey ? 'Update API Key' : 'Deploy Personal Key'}
               </button>
-              <a 
-                href="https://ai.google.dev/gemini-api/docs/billing" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center justify-center gap-1 hover:text-orange-500 transition-colors py-2"
-              >
-                Billing Documentation <ExternalLink size={10} />
-              </a>
             </div>
-          </div>
-        </div>
-
-        {/* Profile Section */}
-        <div className="space-y-4">
-          <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
-            <User size={18} className="text-blue-500" /> User Profile
-          </h3>
-          <div className="space-y-2">
-            <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Identity Name</label>
-            <input 
-              type="text" 
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              className="w-full bg-white/60 p-4 rounded-2xl border border-gray-100 font-bold text-gray-700 outline-none focus:ring-4 focus:ring-blue-100 transition-all shadow-sm"
-            />
           </div>
         </div>
 
@@ -164,10 +156,10 @@ const SettingsTab: React.FC = () => {
       
       <div className="p-6 bg-indigo-50/50 rounded-[2.5rem] border border-indigo-100/50 mb-10">
          <h4 className="text-[10px] font-black text-indigo-700 mb-2 flex items-center gap-2 uppercase tracking-widest">
-           <Zap size={14} /> Productivity Sync
+           <Zap size={14} /> Vault Encryption
          </h4>
          <p className="text-xs text-indigo-600/80 leading-relaxed font-bold">
-           All your data is stored locally on this device. Privacy is our mission objective. Panda-Mate never shares your schedule.
+           Your profile is synchronized with a physical folder on this device. Data is compressed for performance. No data ever leaves your device folder.
          </p>
       </div>
     </div>

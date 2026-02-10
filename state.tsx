@@ -26,101 +26,197 @@ interface AppContextType {
   setRemindersEnabled: (enabled: boolean) => void;
   schedulerDate: Date;
   setSchedulerDate: (date: Date) => void;
+  isInitialized: boolean;
+  initializeProfile: (name: string, location?: string) => Promise<void>;
+  userLocation: string;
+  startDate: string;
+  needsPermission: boolean;
+  requestFileSystemPermission: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const DATA_FILENAME = 'panda_vault.json';
 const SPACED_INTERVALS = [1, 3, 7, 11];
 
-export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem('panda_tasks');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
-  const [stats, setStats] = useState<UserStats>(() => {
-    const saved = localStorage.getItem('panda_stats');
-    return saved ? JSON.parse(saved) : { 
-      streak: 0, 
-      xp: 0, 
-      hydrationCount: 0, 
-      lastHydrationUpdate: Date.now(),
-      dailyCompletion: {}
-    };
-  });
+// Helper to interact with IndexedDB to store the directory handle
+const handleStore = {
+  async set(handle: FileSystemDirectoryHandle) {
+    const db = await this.open();
+    return new Promise((resolve) => {
+      const tx = db.transaction('handles', 'readwrite');
+      tx.objectStore('handles').put(handle, 'root');
+      tx.oncomplete = () => resolve(true);
+    });
+  },
+  async get(): Promise<FileSystemDirectoryHandle | null> {
+    const db = await this.open();
+    return new Promise((resolve) => {
+      const tx = db.transaction('handles', 'readonly');
+      const req = tx.objectStore('handles').get('root');
+      req.onsuccess = () => resolve(req.result || null);
+    });
+  },
+  open(): Promise<IDBDatabase> {
+    return new Promise((resolve) => {
+      const req = indexedDB.open('PandaStorage', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('handles');
+      req.onsuccess = () => resolve(req.result);
+    });
+  }
+};
 
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [userName, setUserName] = useState('PandaUser');
+  const [userLocation, setUserLocation] = useState('Unknown Base');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [stats, setStats] = useState<UserStats>({ streak: 0, xp: 0, hydrationCount: 0, lastHydrationUpdate: Date.now(), dailyCompletion: {} });
+  const [hydration, setHydration] = useState(0);
+  const [sleepConfig, setSleepConfig] = useState({ bedtime: "22:00", duration: 8 });
+  const [remindersEnabled, setRemindersEnabled] = useState(true);
+  
+  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [needsPermission, setNeedsPermission] = useState(false);
+  
   const [pandaState, setPandaState] = useState<PandaState>('IDLE');
   const [activeTab, setActiveTab] = useState<Tab>(Tab.HOME);
   const [schedulerDate, setSchedulerDate] = useState(new Date());
-  const [hydration, setHydration] = useState(0);
-  const [sleepConfig, setSleepConfig] = useState({ bedtime: "22:00", duration: 8 });
-  const [userName, setUserName] = useState(() => localStorage.getItem('panda_username') || 'PandaUser');
-  const [remindersEnabled, setRemindersEnabled] = useState(() => localStorage.getItem('panda_reminders') === 'true');
 
-  useEffect(() => {
-    localStorage.setItem('panda_tasks', JSON.stringify(tasks));
-  }, [tasks]);
+  // Load from File System
+  const loadData = async (handle: FileSystemDirectoryHandle) => {
+    try {
+      const fileHandle = await handle.getFileHandle(DATA_FILENAME, { create: true });
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      if (!text) return false;
+      
+      const data = JSON.parse(text);
+      setUserName(data.userName || 'PandaUser');
+      setUserLocation(data.userLocation || 'Unknown Base');
+      setStartDate(data.startDate || new Date().toISOString().split('T')[0]);
+      setTasks(data.tasks || []);
+      setStats(data.stats || { streak: 0, xp: 0, hydrationCount: 0, lastHydrationUpdate: Date.now(), dailyCompletion: {} });
+      setHydration(data.hydration || 0);
+      setSleepConfig(data.sleepConfig || { bedtime: "22:00", duration: 8 });
+      setRemindersEnabled(data.remindersEnabled !== undefined ? data.remindersEnabled : true);
+      setIsInitialized(true);
+      return true;
+    } catch (e) {
+      console.error("Failed to load from file:", e);
+      return false;
+    }
+  };
 
-  useEffect(() => {
-    localStorage.setItem('panda_stats', JSON.stringify(stats));
-  }, [stats]);
+  // Save to File System (Compressed/Minified)
+  const saveToDisk = useCallback(async () => {
+    if (!dirHandle) return;
+    try {
+      // Check if we still have permission
+      // @ts-ignore - queryPermission might be missing from some browser type definitions
+      const status = await dirHandle.queryPermission({ mode: 'readwrite' });
+      if (status !== 'granted') return;
 
-  useEffect(() => {
-    localStorage.setItem('panda_username', userName);
-  }, [userName]);
+      const fileHandle = await dirHandle.getFileHandle(DATA_FILENAME, { create: true });
+      const writable = await fileHandle.createWritable();
+      
+      const payload = JSON.stringify({
+        userName,
+        userLocation,
+        startDate,
+        tasks,
+        stats,
+        hydration,
+        sleepConfig,
+        remindersEnabled
+      }); // Compressed naturally as a single line JSON string
+      
+      await writable.write(payload);
+      await writable.close();
+    } catch (e) {
+      console.error("Autosave failed:", e);
+    }
+  }, [dirHandle, userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled]);
 
+  // Initial Boot: Look for existing handle
   useEffect(() => {
-    localStorage.setItem('panda_reminders', remindersEnabled.toString());
-  }, [remindersEnabled]);
+    const boot = async () => {
+      const savedHandle = await handleStore.get();
+      if (savedHandle) {
+        setDirHandle(savedHandle);
+        // @ts-ignore - queryPermission might be missing from some browser type definitions
+        const status = await savedHandle.queryPermission({ mode: 'readwrite' });
+        if (status === 'granted') {
+          await loadData(savedHandle);
+        } else {
+          setNeedsPermission(true);
+        }
+      }
+    };
+    boot();
+  }, []);
+
+  // Autosave trigger
+  useEffect(() => {
+    if (isInitialized) {
+      const timer = setTimeout(() => saveToDisk(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized, tasks, stats, hydration, sleepConfig, remindersEnabled, saveToDisk]);
+
+  const requestFileSystemPermission = async () => {
+    if (!dirHandle) return;
+    // @ts-ignore - requestPermission might be missing from some browser type definitions
+    const status = await dirHandle.requestPermission({ mode: 'readwrite' });
+    if (status === 'granted') {
+      setNeedsPermission(false);
+      await loadData(dirHandle);
+    }
+  };
+
+  const initializeProfile = async (name: string, location?: string) => {
+    try {
+      // @ts-ignore
+      const handle = await window.showDirectoryPicker();
+      await handleStore.set(handle);
+      setDirHandle(handle);
+      
+      const today = new Date().toISOString().split('T')[0];
+      setUserName(name);
+      setStartDate(today);
+      if (location) setUserLocation(location);
+      setIsInitialized(true);
+      
+      // Save initial state
+      setTimeout(() => saveToDisk(), 100);
+    } catch (e) {
+      console.error("Initialization cancelled or failed:", e);
+    }
+  };
 
   const updateDailyCompletion = useCallback((taskList: Task[], targetDate: string) => {
     const dayTasks = taskList.filter(t => t.startTime.startsWith(targetDate));
     if (dayTasks.length === 0) return;
-
     const completed = dayTasks.filter(t => t.completed).length;
     const percentage = Math.round((completed / dayTasks.length) * 100);
-
-    setStats(prev => ({
-      ...prev,
-      dailyCompletion: {
-        ...prev.dailyCompletion,
-        [targetDate]: percentage
-      }
-    }));
+    setStats(prev => ({ ...prev, dailyCompletion: { ...prev.dailyCompletion, [targetDate]: percentage } }));
   }, []);
 
   const addTask = useCallback((taskData: Partial<Task>) => {
     setTasks(prev => {
       const updated = [...prev];
       let start = taskData.startTime || new Date().toISOString();
-      
       if (taskData.isQuick) {
         const now = new Date();
-        const minutes = Math.floor(now.getMinutes() / 15) * 15;
-        now.setMinutes(minutes, 0, 0);
+        now.setMinutes(Math.floor(now.getMinutes() / 15) * 15, 0, 0);
         start = now.toISOString();
-
-        const hasMedicineConflict = updated.some(t => t.isMedicine && t.startTime === start);
-        
-        if (hasMedicineConflict) {
+        if (updated.some(t => t.startTime === start)) {
           let nextFree = new Date(start);
-          while (updated.some(t => t.startTime === nextFree.toISOString())) {
-            nextFree.setMinutes(nextFree.getMinutes() + 5); 
-          }
+          while (updated.some(t => t.startTime === nextFree.toISOString())) nextFree.setMinutes(nextFree.getMinutes() + 15);
           start = nextFree.toISOString();
-        } else {
-          const existingIdx = updated.findIndex(t => t.startTime === start && !t.isMedicine);
-          if (existingIdx !== -1) {
-            let nextFree = new Date(start);
-            while (updated.some(t => t.startTime === nextFree.toISOString())) {
-              nextFree.setMinutes(nextFree.getMinutes() + 15);
-            }
-            const displaced = { ...updated[existingIdx], startTime: nextFree.toISOString() };
-            updated[existingIdx] = displaced;
-          }
         }
       }
-
       const newTask: Task = {
         id: Math.random().toString(36).substr(2, 9),
         name: taskData.name || 'New Task',
@@ -133,7 +229,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isSpacedRepetition: taskData.isSpacedRepetition || false,
         repetitionStep: taskData.repetitionStep || 0,
       };
-      
       const finalTasks = [...updated, newTask];
       updateDailyCompletion(finalTasks, start.split('T')[0]);
       return finalTasks;
@@ -143,141 +238,5 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addMedicineSchedule = useCallback((name: string, time: string, days: number) => {
     const newTasks: Task[] = [];
     const [h, m] = time.split(':').map(Number);
-    
     for (let i = 0; i < days; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      d.setHours(h, m, 0, 0);
-      
-      newTasks.push({
-        id: Math.random().toString(36).substr(2, 9),
-        name: `Medicine: ${name}`,
-        category: 'Medicine',
-        startTime: d.toISOString(),
-        durationMinutes: 5,
-        completed: false,
-        isMedicine: true
-      });
-    }
-
-    setTasks(prev => {
-      const filtered = prev.filter(t => {
-        const isConflict = newTasks.some(nt => nt.startTime === t.startTime);
-        return !(isConflict && !t.isMedicine);
-      });
-      const finalTasks = [...filtered, ...newTasks];
-      // Update completion for all affected days
-      const affectedDays = Array.from(new Set(newTasks.map(nt => nt.startTime.split('T')[0])));
-      affectedDays.forEach(day => updateDailyCompletion(finalTasks, day));
-      return finalTasks;
-    });
-  }, [updateDailyCompletion]);
-
-  const toggleTask = useCallback((id: string) => {
-    setTasks(prev => {
-      const taskIndex = prev.findIndex(t => t.id === id);
-      if (taskIndex === -1) return prev;
-      
-      const task = prev[taskIndex];
-      const isNowCompleted = !task.completed;
-      const updatedTasks = [...prev];
-      updatedTasks[taskIndex] = { ...task, completed: isNowCompleted };
-
-      if (isNowCompleted) {
-        setStats(s => ({ ...s, xp: s.xp + 50 }));
-        
-        if (task.isSpacedRepetition) {
-          const currentStep = task.repetitionStep || 0;
-          if (currentStep < SPACED_INTERVALS.length) {
-            const nextDate = new Date(task.startTime);
-            nextDate.setDate(nextDate.getDate() + SPACED_INTERVALS[currentStep]);
-            
-            updatedTasks.push({
-              ...task,
-              id: Math.random().toString(36).substr(2, 9),
-              startTime: nextDate.toISOString(),
-              completed: false,
-              repetitionStep: currentStep + 1
-            });
-          }
-        }
-      }
-      
-      const day = task.startTime.split('T')[0];
-      updateDailyCompletion(updatedTasks, day);
-      return updatedTasks;
-    });
-  }, [updateDailyCompletion]);
-
-  const deleteTask = (id: string) => {
-    setTasks(prev => {
-      const taskToDelete = prev.find(t => t.id === id);
-      const filtered = prev.filter(t => t.id !== id);
-      if (taskToDelete) {
-        updateDailyCompletion(filtered, taskToDelete.startTime.split('T')[0]);
-      }
-      return filtered;
-    });
-  };
-  
-  const copySchedule = useCallback((sourceDate: string, targetDate: string, taskIds: string[]) => {
-    const sourceTasks = tasks.filter(t => {
-      const d = new Date(t.startTime);
-      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      return dStr === sourceDate && taskIds.includes(t.id) && !t.isQuick && !t.isSpacedRepetition && !t.isMedicine;
-    });
-    
-    const newTasks = sourceTasks.map(t => {
-      const originalDate = new Date(t.startTime);
-      const newStartTime = new Date(targetDate);
-      newStartTime.setHours(originalDate.getHours(), originalDate.getMinutes(), 0, 0);
-      return { 
-        ...t, 
-        id: Math.random().toString(36).substr(2, 9), 
-        startTime: newStartTime.toISOString(), 
-        completed: false 
-      };
-    });
-    
-    setTasks(prev => {
-      const filtered = prev.filter(t => {
-        const taskDate = new Date(t.startTime);
-        const taskDateStr = `${taskDate.getFullYear()}-${String(taskDate.getMonth() + 1).padStart(2, '0')}-${String(taskDate.getDate()).padStart(2, '0')}`;
-        if (taskDateStr !== targetDate) return true;
-        
-        const isConflict = newTasks.some(nt => nt.startTime === t.startTime);
-        return !(isConflict && !t.isMedicine && !t.isSpacedRepetition);
-      });
-      const finalTasks = [...filtered, ...newTasks];
-      updateDailyCompletion(finalTasks, targetDate);
-      return finalTasks;
-    });
-  }, [tasks, updateDailyCompletion]);
-
-  const setMainTask = (name: string, date: string) => {
-    setStats(prev => ({
-      ...prev,
-      mainTask: { name, targetDate: date }
-    }));
-  };
-
-  const addXP = (amount: number) => setStats(prev => ({ ...prev, xp: prev.xp + amount }));
-
-  return (
-    <AppContext.Provider value={{
-      tasks, addTask, addMedicineSchedule, toggleTask, deleteTask, copySchedule,
-      stats, addXP, pandaState, setPandaState, activeTab, setActiveTab,
-      hydration, setHydration, sleepConfig, setSleepConfig,
-      userName, setUserName, remindersEnabled, setRemindersEnabled,
-      schedulerDate, setSchedulerDate, setMainTask
-    }}>
-      {children}
-    </AppContext.Provider>
-  );
-};
-
-export const useApp = () => {
-  const context = useContext(AppContext);
-  if (!context) throw new Error('useApp must be used within AppProvider');
-  return context;
-};
+      const d = new Date

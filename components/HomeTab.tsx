@@ -1,12 +1,12 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
-import { Check, Droplets, Zap, Target, Pill, Clock, Calendar, AlertCircle, ListTodo, RefreshCw, ChevronRight } from 'lucide-react';
+import { Check, Droplets, Zap, Target, Pill, Clock, Calendar, AlertCircle, ListTodo, RefreshCw, ChevronRight, HardDrive } from 'lucide-react';
 import { useApp } from '../state';
 import { CATEGORY_COLORS, CategoryType, Tab, Task } from '../types';
 
 const HomeTab: React.FC = () => {
-  const { tasks, addTask, addMedicineSchedule, toggleTask, hydration, setHydration, setActiveTab, userName, sleepConfig } = useApp();
+  const { tasks, addTask, addMedicineSchedule, toggleTask, hydration, setHydration, setActiveTab, userName, sleepConfig, userLocation } = useApp();
   const [fastTask, setFastTask] = useState('');
   const [fastCategory, setFastCategory] = useState<CategoryType>('Mind');
 
@@ -33,7 +33,7 @@ const HomeTab: React.FC = () => {
   }, [todaysTasks]);
 
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
+    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
       Notification.requestPermission();
     }
   }, []);
@@ -41,26 +41,32 @@ const HomeTab: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
-      const currentIso = now.toISOString().substring(0, 16); 
+      // Use localized time for comparison to avoid timezone mishaps
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
       
-      const dueMed = todaysTasks.find(t => 
-        t.isMedicine && 
-        !t.completed && 
-        t.startTime.startsWith(currentIso)
-      );
+      const dueMed = todaysTasks.find(t => {
+        if (!t.isMedicine || t.completed) return false;
+        const tDate = new Date(t.startTime);
+        return tDate.getHours() === currentHours && tDate.getMinutes() === currentMinutes;
+      });
 
       if (dueMed && activeAlarm?.id !== dueMed.id) {
         setActiveAlarm(dueMed);
         if (Notification.permission === "granted") {
-          new Notification("MEDICINE TIME!", {
-            body: `It's time for your ${dueMed.name}. Please take it now!`,
+          const n = new Notification("💊 MEDICINE REMINDER", {
+            body: `Time for your ${dueMed.name}. Protocol active.`,
             icon: "https://cdn-icons-png.flaticon.com/512/2966/2966327.png",
+            tag: "medicine-alarm",
             requireInteraction: true,
-            tag: "medicine-alarm"
+            silent: false,
           });
+          n.onclick = () => {
+            window.focus();
+          };
         }
       }
-    }, 10000);
+    }, 15000); // Check every 15 seconds
     return () => clearInterval(interval);
   }, [todaysTasks, activeAlarm]);
 
@@ -126,7 +132,7 @@ const HomeTab: React.FC = () => {
     if (!medName.trim()) return;
     addMedicineSchedule(medName, medTime, medDays);
     setMedName('');
-    alert("Medicine schedule deployed! Slots are now priority-locked.");
+    alert("Medicine schedule deployed to local device base!");
   };
 
   return (
@@ -140,10 +146,17 @@ const HomeTab: React.FC = () => {
         </div>
       )}
 
-      <div className="pt-4 flex justify-between items-end">
+      <div className="pt-4 flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-black text-[#1C1B1F] tracking-tight">Focus, {userName}</h1>
           <p className="text-sm font-bold text-[#49454F] opacity-70">Today is {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-green-50 rounded-full border border-green-100">
+            <HardDrive size={12} className="text-green-600" />
+            <span className="text-[9px] font-black text-green-700 uppercase">Local Base: {userLocation}</span>
+          </div>
+          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Auto-Fetching Data</p>
         </div>
       </div>
 

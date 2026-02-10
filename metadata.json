@@ -1,5 +1,7 @@
 {
-  "name": "Copy of Panda-Mate",
+  "name": "Panda-Mate Android",
   "description": "A gamified productivity companion featuring an interactive panda mascot, smart scheduling, and analytics.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "geolocation"
+  ]
 }
