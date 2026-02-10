@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Moon, Clock, Palette, Bell, User, Zap, Key, ExternalLink, ShieldCheck, WifiOff, Globe, FolderCheck } from 'lucide-react';
+import { Moon, Clock, Palette, Bell, User, Zap, Key, ExternalLink, ShieldCheck, WifiOff, Globe, FolderCheck, Database } from 'lucide-react';
 import { useApp } from '../state';
 
 const SettingsTab: React.FC = () => {
-  const { sleepConfig, setSleepConfig, userName, setUserName, remindersEnabled, setRemindersEnabled, userLocation } = useApp();
+  const { sleepConfig, setSleepConfig, userName, setUserName, remindersEnabled, setRemindersEnabled, userLocation, storageType } = useApp();
   const [hasKey, setHasKey] = useState(false);
 
   useEffect(() => {
@@ -39,19 +39,19 @@ const SettingsTab: React.FC = () => {
       </div>
 
       {/* Vault Connectivity Badge */}
-      <div className={`p-4 rounded-3xl border flex items-center justify-between bg-indigo-50 border-indigo-100`}>
+      <div className={`p-4 rounded-3xl border flex items-center justify-between ${storageType === 'FOLDER' ? 'bg-indigo-50 border-indigo-100' : 'bg-orange-50 border-orange-100'}`}>
         <div className="flex items-center gap-3">
-          <FolderCheck size={18} className="text-indigo-500" />
+          {storageType === 'FOLDER' ? <FolderCheck size={18} className="text-indigo-500" /> : <Database size={18} className="text-orange-500" />}
           <div>
-            <span className={`text-[11px] font-black uppercase tracking-widest block text-indigo-600`}>
-              Directory Vault Active
+            <span className={`text-[11px] font-black uppercase tracking-widest block ${storageType === 'FOLDER' ? 'text-indigo-600' : 'text-orange-600'}`}>
+              {storageType === 'FOLDER' ? 'Directory Vault Active' : 'Browser Vault Active'}
             </span>
             <span className="text-[9px] font-bold text-gray-400 uppercase">
               Base: {userLocation}
             </span>
           </div>
         </div>
-        <ShieldCheck size={20} className="text-green-500" />
+        <ShieldCheck size={20} className={storageType === 'FOLDER' ? 'text-green-500' : 'text-orange-500'} />
       </div>
 
       <div className="bg-white/40 p-6 rounded-[2.5rem] border border-white/50 shadow-sm space-y-8 transition-all">
@@ -159,7 +159,9 @@ const SettingsTab: React.FC = () => {
            <Zap size={14} /> Vault Encryption
          </h4>
          <p className="text-xs text-indigo-600/80 leading-relaxed font-bold">
-           Your profile is synchronized with a physical folder on this device. Data is compressed for performance. No data ever leaves your device folder.
+           {storageType === 'FOLDER' 
+             ? 'Your profile is synchronized with a physical folder on this device. Data is compressed for performance.' 
+             : 'Folder access is restricted; your profile is secured in the Browser Vault. Data remains local to this device.'}
          </p>
       </div>
     </div>

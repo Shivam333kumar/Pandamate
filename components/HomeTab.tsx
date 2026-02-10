@@ -1,9 +1,9 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
-import { Check, Droplets, Zap, Target, Pill, Clock, Calendar, AlertCircle, ListTodo, RefreshCw, ChevronRight, HardDrive } from 'lucide-react';
+import { Check, Droplets, Zap, Target, Pill, Clock, ListTodo, RefreshCw, ChevronRight, HardDrive } from 'lucide-react';
 import { useApp } from '../state';
-import { CATEGORY_COLORS, CategoryType, Tab, Task } from '../types';
+import { CATEGORY_COLORS, CategoryType, Tab } from '../types';
 
 const HomeTab: React.FC = () => {
   const { tasks, addTask, addMedicineSchedule, toggleTask, hydration, setHydration, setActiveTab, userName, sleepConfig, userLocation } = useApp();
@@ -14,8 +14,6 @@ const HomeTab: React.FC = () => {
   const [medTime, setMedTime] = useState('08:00');
   const [medDays, setMedDays] = useState(7);
   
-  const [activeAlarm, setActiveAlarm] = useState<Task | null>(null);
-
   const todayStr = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -31,44 +29,6 @@ const HomeTab: React.FC = () => {
     const now = new Date().getTime();
     return todaysTasks.find(t => !t.completed && new Date(t.startTime).getTime() > now - 900000);
   }, [todaysTasks]);
-
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
-      // Use localized time for comparison to avoid timezone mishaps
-      const currentHours = now.getHours();
-      const currentMinutes = now.getMinutes();
-      
-      const dueMed = todaysTasks.find(t => {
-        if (!t.isMedicine || t.completed) return false;
-        const tDate = new Date(t.startTime);
-        return tDate.getHours() === currentHours && tDate.getMinutes() === currentMinutes;
-      });
-
-      if (dueMed && activeAlarm?.id !== dueMed.id) {
-        setActiveAlarm(dueMed);
-        if (Notification.permission === "granted") {
-          const n = new Notification("💊 MEDICINE REMINDER", {
-            body: `Time for your ${dueMed.name}. Protocol active.`,
-            icon: "https://cdn-icons-png.flaticon.com/512/2966/2966327.png",
-            tag: "medicine-alarm",
-            requireInteraction: true,
-            silent: false,
-          });
-          n.onclick = () => {
-            window.focus();
-          };
-        }
-      }
-    }, 15000); // Check every 15 seconds
-    return () => clearInterval(interval);
-  }, [todaysTasks, activeAlarm]);
 
   const completionPercentage = useMemo(() => {
     if (todaysTasks.length === 0) return 0;
@@ -137,15 +97,6 @@ const HomeTab: React.FC = () => {
 
   return (
     <div className="tab-content h-full overflow-y-auto no-scrollbar px-4 space-y-6 pb-24">
-      {activeAlarm && (
-        <div className="fixed inset-0 z-[300] bg-red-600 flex flex-col items-center justify-center p-8 text-white animate-pulse">
-          <AlertCircle size={80} className="mb-6" />
-          <h2 className="text-4xl font-black mb-2 text-center uppercase tracking-tighter">Medical Alert</h2>
-          <p className="text-xl font-bold mb-8 opacity-80">{activeAlarm.name}</p>
-          <button onClick={() => { toggleTask(activeAlarm.id); setActiveAlarm(null); }} className="w-full bg-white text-red-600 py-6 rounded-[2rem] font-black text-xl shadow-2xl active:scale-95 transition-transform">TAKEN</button>
-        </div>
-      )}
-
       <div className="pt-4 flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-black text-[#1C1B1F] tracking-tight">Focus, {userName}</h1>
