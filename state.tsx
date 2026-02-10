@@ -28,11 +28,13 @@ interface AppContextType {
   setSchedulerDate: (date: Date) => void;
   isInitialized: boolean;
   initializeProfile: (name: string, location?: string, forceBrowserStorage?: boolean) => Promise<boolean>;
+  changeStorageFolder: () => Promise<void>;
   userLocation: string;
   startDate: string;
   needsPermission: boolean;
   requestFileSystemPermission: () => Promise<void>;
   storageType: 'FOLDER' | 'BROWSER' | 'NONE';
+  vaultFiles: string[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -40,11 +42,11 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const DATA_FILENAME = 'panda_vault.json';
 const SPACED_INTERVALS = [1, 3, 7, 11];
 
-// Helper to interact with IndexedDB to store handles and browser-based data
+// Hardened IndexedDB utility for handle persistence
 const vaultDB = {
   async open(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open('PandaVault', 2);
+      const req = indexedDB.open('PandaVault', 3);
       req.onupgradeneeded = (e) => {
         const db = req.result;
         if (!db.objectStoreNames.contains('metadata')) db.createObjectStore('metadata');
@@ -102,10 +104,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [storageType, setStorageType] = useState<'FOLDER' | 'BROWSER' | 'NONE'>('NONE');
   const [needsPermission, setNeedsPermission] = useState(false);
+  const [vaultFiles, setVaultFiles] = useState<string[]>([]);
   
   const [pandaState, setPandaState] = useState<PandaState>('IDLE');
   const [activeTab, setActiveTab] = useState<Tab>(Tab.HOME);
   const [schedulerDate, setSchedulerDate] = useState(new Date());
+
+  const listFiles = useCallback(async (handle: FileSystemDirectoryHandle) => {
+    try {
+      const files: string[] = [];
+      // @ts-ignore
+      for await (const entry of handle.values()) {
+        files.push(entry.name);
+      }
+      setVaultFiles(files);
+    } catch (e) {
+      console.error("Failed to list files:", e);
+    }
+  }, []);
 
   const applyData = (data: any) => {
     setUserName(data.userName || 'PandaUser');
@@ -124,8 +140,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const fileHandle = await handle.getFileHandle(DATA_FILENAME, { create: true });
       const file = await fileHandle.getFile();
       const text = await file.text();
-      if (!text) return false;
-      applyData(JSON.parse(text));
+      if (text) {
+        applyData(JSON.parse(text));
+      }
+      await listFiles(handle);
       return true;
     } catch (e) {
       console.error("Failed to load from file:", e);
@@ -155,13 +173,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const writable = await fileHandle.createWritable();
         await writable.write(payload);
         await writable.close();
+        await listFiles(dirHandle);
       } catch (e) {
         console.error("Folder save failed:", e);
       }
     } else if (storageType === 'BROWSER') {
       await vaultDB.setBrowserData(payload);
+      setVaultFiles(['[Internal IndexedDB]']);
     }
-  }, [dirHandle, storageType, userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled]);
+  }, [dirHandle, storageType, userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled, listFiles]);
 
   useEffect(() => {
     const boot = async () => {
@@ -178,8 +198,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setStorageType('FOLDER');
           // @ts-ignore
           const status = await handle.queryPermission({ mode: 'readwrite' });
-          if (status === 'granted') await loadFromFile(handle);
-          else setNeedsPermission(true);
+          if (status === 'granted') {
+            await loadFromFile(handle);
+          } else {
+            setNeedsPermission(true);
+          }
         }
       } catch (e) {
         console.error("Boot error:", e);
@@ -209,13 +232,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const changeStorageFolder = async () => {
+    try {
+      // @ts-ignore
+      const handle = await window.showDirectoryPicker();
+      await vaultDB.setHandle(handle);
+      setDirHandle(handle);
+      setStorageType('FOLDER');
+      await saveToDisk();
+      alert(`Vault successfully migrated to ${handle.name}`);
+    } catch (e) {
+      console.error("Migration failed:", e);
+    }
+  };
+
   const initializeProfile = async (name: string, location?: string, forceBrowserStorage?: boolean): Promise<boolean> => {
     try {
       if (forceBrowserStorage) {
         await vaultDB.setHandle('BROWSER_VAULT');
         setStorageType('BROWSER');
       } else {
-        // Wrap in a try-catch specifically for SecurityErrors in framed environments
         let handle;
         try {
           // @ts-ignore
@@ -360,8 +396,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       stats, addXP, pandaState, setPandaState, activeTab, setActiveTab,
       hydration, setHydration, sleepConfig, setSleepConfig,
       userName, setUserName, remindersEnabled, setRemindersEnabled,
-      schedulerDate, setSchedulerDate, setMainTask, isInitialized, initializeProfile, userLocation, startDate,
-      needsPermission, requestFileSystemPermission, storageType
+      schedulerDate, setSchedulerDate, setMainTask, isInitialized, initializeProfile, changeStorageFolder, userLocation, startDate,
+      needsPermission, requestFileSystemPermission, storageType, vaultFiles
     }}>
       {children}
     </AppContext.Provider>
