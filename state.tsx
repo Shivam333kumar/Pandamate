@@ -8,6 +8,7 @@ interface AppContextType {
   addMedicineSchedule: (name: string, time: string, days: number) => void;
   toggleTask: (id: string) => void;
   deleteTask: (id: string) => void;
+  updateTask: (id: string, updates: Partial<Task>) => void;
   copySchedule: (sourceDate: string, targetDate: string, taskIds: string[]) => void;
   stats: UserStats;
   setMainTask: (name: string, date: string) => void;
@@ -47,7 +48,7 @@ const SPACED_INTERVALS = [1, 3, 7, 11];
 const vaultDB = {
   async open(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open('PandaVaultAuth', 4);
+      const req = indexedDB.open('PandaVaultAuth', 5); // Bumped version for schema change
       req.onupgradeneeded = (e) => {
         const db = req.result;
         if (!db.objectStoreNames.contains('users')) db.createObjectStore('users', { keyPath: 'username' });
@@ -299,11 +300,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const d = new Date();
       d.setDate(d.getDate() + i);
       d.setHours(h, m, 0, 0);
-      newTasks.push({ id: Math.random().toString(36).substr(2, 9), name: `Medicine: ${name}`, category: 'Medicine', startTime: d.toISOString(), durationMinutes: 5, completed: false, isMedicine: true });
+      newTasks.push({ 
+        id: Math.random().toString(36).substr(2, 9), 
+        name: `Medicine: ${name}`, 
+        category: 'Medicine', 
+        startTime: d.toISOString(), 
+        durationMinutes: 5, 
+        completed: false, 
+        isMedicine: true 
+      });
     }
     setTasks(prev => {
-      const filtered = prev.filter(t => !newTasks.some(nt => nt.startTime === t.startTime && !t.isMedicine));
-      const finalTasks = [...filtered, ...newTasks];
+      const finalTasks = [...prev, ...newTasks];
       Array.from(new Set(newTasks.map(nt => nt.startTime.split('T')[0]))).forEach(day => updateDailyCompletion(finalTasks, day));
       return finalTasks;
     });
@@ -340,6 +348,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return filtered;
     });
   };
+
+  const updateTask = useCallback((id: string, updates: Partial<Task>) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  }, []);
   
   const copySchedule = useCallback((source: string, target: string, ids: string[]) => {
     const sourceTasks = tasks.filter(t => t.startTime.startsWith(source) && ids.includes(t.id) && !t.isQuick && !t.isSpacedRepetition && !t.isMedicine);
@@ -362,7 +374,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      tasks, addTask, addMedicineSchedule, toggleTask, deleteTask, copySchedule,
+      tasks, addTask, addMedicineSchedule, toggleTask, deleteTask, updateTask, copySchedule,
       stats, addXP, pandaState, setPandaState, activeTab, setActiveTab,
       hydration, setHydration, sleepConfig, setSleepConfig,
       userName, setUserName, remindersEnabled, setRemindersEnabled,

@@ -92,7 +92,7 @@ const HomeTab: React.FC = () => {
     if (!medName.trim()) return;
     addMedicineSchedule(medName, medTime, medDays);
     setMedName('');
-    alert("Medicine Protocol Deployed! Alarms active.");
+    alert(`Medicine Protocol Deployed! Alarms active for ${medDays} days.`);
   };
 
   return (
@@ -129,6 +129,48 @@ const HomeTab: React.FC = () => {
         </div>
       )}
 
+      {/* Medicine Protocol (ALARM SCHEDULER) */}
+      <div className="bg-red-50 p-6 rounded-[2.5rem] border border-red-100 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Pill size={20} className="text-red-600" />
+            <h4 className="font-black text-red-900">Medicine Protocol</h4>
+          </div>
+          <span className="text-[8px] font-black text-red-500 bg-red-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Alarm System Active</span>
+        </div>
+        <form onSubmit={handleMedSchedule} className="space-y-3">
+          <input 
+            type="text" 
+            value={medName} 
+            onChange={(e) => setMedName(e.target.value)} 
+            placeholder="Pill or Medicine Name..." 
+            className="w-full bg-white px-5 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-900 shadow-sm"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative">
+              <Clock size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-red-300" />
+              <input 
+                type="time" 
+                value={medTime} 
+                onChange={(e) => setMedTime(e.target.value)} 
+                className="w-full bg-white pl-10 pr-4 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-800 text-xs" 
+              />
+            </div>
+            <div className="relative">
+              <Calendar size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-red-300" />
+              <input 
+                type="number" 
+                value={medDays} 
+                onChange={(e) => setMedDays(parseInt(e.target.value) || 1)} 
+                placeholder="Days"
+                className="w-full bg-white pl-10 pr-4 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-800 text-xs" 
+              />
+            </div>
+          </div>
+          <button type="submit" className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-xs shadow-lg shadow-red-100 active:scale-95 transition-all">DEPLOY ALARM CYCLE</button>
+        </form>
+      </div>
+
       {/* Today's Agenda */}
       <div className="m3-card p-6 bg-white shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-6">
@@ -163,48 +205,6 @@ const HomeTab: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Medicine Protocol restore */}
-      <div className="bg-red-50 p-6 rounded-[2.5rem] border border-red-100">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Pill size={20} className="text-red-600" />
-            <h4 className="font-black text-red-900">Medicine Protocol</h4>
-          </div>
-          <span className="text-[8px] font-black text-red-500 bg-red-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Alarm Active</span>
-        </div>
-        <form onSubmit={handleMedSchedule} className="space-y-3">
-          <input 
-            type="text" 
-            value={medName} 
-            onChange={(e) => setMedName(e.target.value)} 
-            placeholder="Medicine Name..." 
-            className="w-full bg-white px-5 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-900 shadow-sm"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <div className="relative">
-              <Clock size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-red-300" />
-              <input 
-                type="time" 
-                value={medTime} 
-                onChange={(e) => setMedTime(e.target.value)} 
-                className="w-full bg-white pl-10 pr-4 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-800 text-xs" 
-              />
-            </div>
-            <div className="relative">
-              <Calendar size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-red-300" />
-              <input 
-                type="number" 
-                value={medDays} 
-                onChange={(e) => setMedDays(parseInt(e.target.value))} 
-                placeholder="Days"
-                className="w-full bg-white pl-10 pr-4 py-3 rounded-2xl outline-none border border-red-100 font-bold text-red-800 text-xs" 
-              />
-            </div>
-          </div>
-          <button type="submit" className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-xs shadow-lg shadow-red-100 active:scale-95 transition-all">DEPLOY SCHEDULE</button>
-        </form>
       </div>
 
       {/* Composition Chart */}

@@ -1,13 +1,14 @@
 
 import React, { useState, useMemo } from 'react';
-import { Plus, Clock, RefreshCw, Copy, Check, X, Save, ChevronLeft, ChevronRight, Calendar, Pill, Moon, History, Trash2 } from 'lucide-react';
+import { Plus, Clock, RefreshCw, Copy, Check, X, Save, ChevronLeft, ChevronRight, Calendar, Pill, Moon, History, Trash2, Edit2 } from 'lucide-react';
 import { useApp } from '../state';
 import { CATEGORY_COLORS, CategoryType, Task } from '../types';
 
 const SchedulerTab: React.FC = () => {
-  const { tasks, addTask, toggleTask, sleepConfig, copySchedule, schedulerDate, setSchedulerDate } = useApp();
+  const { tasks, addTask, toggleTask, updateTask, sleepConfig, copySchedule, schedulerDate, setSchedulerDate } = useApp();
   const [showDrawer, setShowDrawer] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   
   const [newTaskName, setNewTaskName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('Mind');
@@ -39,14 +40,34 @@ const SchedulerTab: React.FC = () => {
   }, [tasks, activeDateStr]);
 
   const handleOpenDrawer = () => {
+    setEditingTask(null);
     setNewTaskName('');
+    setSelectedCategory('Mind');
     setIsSpaced(false);
     setShowDrawer(true);
   };
 
-  const handleAddTask = () => {
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setNewTaskName(task.name);
+    setSelectedCategory(task.category);
+    setIsSpaced(task.isSpacedRepetition || false);
+    setShowDrawer(true);
+  };
+
+  const handleSaveTask = () => {
     if (!newTaskName.trim()) return;
     
+    if (editingTask) {
+      updateTask(editingTask.id, {
+        name: newTaskName,
+        category: selectedCategory,
+        isSpacedRepetition: isSpaced
+      });
+      setShowDrawer(false);
+      return;
+    }
+
     // Determine which times to use: either the selected batch or "Now"
     const timesToDeploy = selectedSlots.length > 0 ? selectedSlots : [null];
 
@@ -185,10 +206,22 @@ const SchedulerTab: React.FC = () => {
                     className={`w-full p-2.5 rounded-xl flex justify-between items-center text-white shadow-md transition-all ${taskAtSlot.completed ? 'opacity-40 grayscale scale-[0.98]' : 'opacity-100'} ${isMedicine ? 'bg-red-500 animate-pulse ring-2 ring-red-100' : ''}`}
                     style={{ backgroundColor: isMedicine ? undefined : CATEGORY_COLORS[taskAtSlot.category] }}
                   >
-                    <div className="flex flex-col overflow-hidden">
-                      <span className={`font-black text-[11px] truncate ${taskAtSlot.completed ? 'line-through' : ''}`}>
-                        {taskAtSlot.name}
-                      </span>
+                    <div className="flex flex-col overflow-hidden flex-1">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <span className={`font-black text-[11px] truncate ${taskAtSlot.completed ? 'line-through' : ''}`}>
+                          {taskAtSlot.name}
+                        </span>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditTask(taskAtSlot);
+                          }}
+                          className="p-1 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+                          title="Edit Mission"
+                        >
+                          <Edit2 size={10} />
+                        </button>
+                      </div>
                       <div className="flex items-center gap-1.5">
                          <span className="text-[8px] font-bold opacity-80 uppercase tracking-tighter">
                           {isMedicine ? 'URGENT MEDICAL' : taskAtSlot.category}
@@ -269,13 +302,13 @@ const SchedulerTab: React.FC = () => {
         </div>
       )}
 
-      {/* Task Creation Drawer */}
+      {/* Task Creation/Edit Drawer */}
       {showDrawer && (
         <div className="fixed inset-0 bg-emerald-950/40 backdrop-blur-sm z-[200] flex items-center justify-center px-6">
           <div className="bg-white/90 backdrop-blur-xl w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-200 border border-white">
-            <h3 className="text-xl font-black mb-1 text-emerald-800 text-center">Plan Mission</h3>
+            <h3 className="text-xl font-black mb-1 text-emerald-800 text-center">{editingTask ? 'Edit Mission' : 'Plan Mission'}</h3>
             <p className="text-[10px] font-bold text-emerald-600/60 uppercase text-center mb-6">
-              {selectedSlots.length > 0 ? `Deploying to [${selectedSlots.length}] Slots` : `Deploying to ${activeDateStr}`}
+              {editingTask ? `Updating ${editingTask.name}` : (selectedSlots.length > 0 ? `Deploying to [${selectedSlots.length}] Slots` : `Deploying to ${activeDateStr}`)}
             </p>
             <div className="space-y-4">
               <input 
@@ -318,7 +351,7 @@ const SchedulerTab: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <button onClick={() => setShowDrawer(false)} className="bg-gray-100 py-4 rounded-2xl font-black text-gray-400 text-sm active:scale-95 transition-all">Cancel</button>
-                <button onClick={handleAddTask} className="bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm active:scale-95 shadow-lg shadow-emerald-100 transition-all">Deploy</button>
+                <button onClick={handleSaveTask} className="bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm active:scale-95 shadow-lg shadow-emerald-100 transition-all">{editingTask ? 'Save' : 'Deploy'}</button>
               </div>
             </div>
           </div>

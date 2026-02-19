@@ -144,6 +144,17 @@ const AppContent: React.FC = () => {
   const { activeTab, isInitialized, tasks, toggleTask, currentUser } = useApp();
   const [activeAlarm, setActiveAlarm] = useState<Task | null>(null);
   const alarmAudio = useRef<HTMLAudioElement | null>(null);
+  const notifiedTasks = useRef<Set<string>>(new Set());
+  const lastCheckedDay = useRef<string>(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW registration failed:', err));
+    }
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -156,6 +167,11 @@ const AppContent: React.FC = () => {
       const currentHours = now.getHours();
       const currentMinutes = now.getMinutes();
       const todayStr = now.toISOString().split('T')[0];
+      
+      if (lastCheckedDay.current !== todayStr) {
+        notifiedTasks.current.clear();
+        lastCheckedDay.current = todayStr;
+      }
       
       const dueMed = tasks.find(t => {
         if (!t.isMedicine || t.completed) return false;
@@ -175,6 +191,36 @@ const AppContent: React.FC = () => {
           });
         }
       }
+
+      // CHANGE 1: Push Notifications When a New Slot Starts
+      tasks.forEach(task => {
+        if (task.completed) return;
+        const tDate = new Date(task.startTime);
+        const tDateStr = tDate.toISOString().split('T')[0];
+        
+        if (tDateStr === todayStr && tDate.getHours() === currentHours && tDate.getMinutes() === currentMinutes) {
+          if (!notifiedTasks.current.has(task.id)) {
+            const showNotification = (title: string, options: NotificationOptions) => {
+              if (Notification.permission === "granted") {
+                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                  navigator.serviceWorker.ready.then(registration => {
+                    registration.showNotification(title, options);
+                  });
+                } else {
+                  new Notification(title, options);
+                }
+              }
+            };
+
+            showNotification(`${task.name} started`, {
+              body: `Your scheduled task "${task.name}" has begun.`,
+              icon: "https://cdn-icons-png.flaticon.com/512/2966/2966327.png",
+              tag: `task-start-${task.id}`,
+            });
+            notifiedTasks.current.add(task.id);
+          }
+        }
+      });
     }, 15000);
 
     return () => {
@@ -188,7 +234,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (activeAlarm && alarmAudio.current) {
-      alarmAudio.current.play().catch(e => console.warn("Audio blocked", e));
+      alarmAudio.current.play().catch(e => console.warn("Audio blocked by browser policy", e));
     } else if (!activeAlarm && alarmAudio.current) {
       alarmAudio.current.pause();
       alarmAudio.current.currentTime = 0;
