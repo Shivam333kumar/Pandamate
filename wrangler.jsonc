@@ -2,7 +2,6 @@
   "name": "panda-mate",
   "compatibility_date": "2024-11-01",
   "assets": {
-    "directory": "./dist",
-    "binding": "ASSETS"
+    "directory": "./dist"
   }
 }
