@@ -12,13 +12,16 @@ interface AppContextType {
   copySchedule: (sourceDate: string, targetDate: string, taskIds: string[]) => void;
   stats: UserStats;
   setMainTask: (name: string, date: string) => void;
+  setDailyGoal: (goal: string) => void;
+  xpData: { xp: number; level: number; maxXp: number };
   addXP: (amount: number) => void;
+  history: { mind: number[]; body: number[]; study: number[] };
   pandaState: PandaState;
   setPandaState: (state: PandaState) => void;
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
   hydration: number;
-  setHydration: React.Dispatch<React.SetStateAction<number>>;
+  setHydration: (val: number) => void;
   sleepConfig: { bedtime: string; duration: number };
   setSleepConfig: React.Dispatch<React.SetStateAction<{ bedtime: string; duration: number }>>;
   userName: string;
@@ -114,7 +117,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [stats, setStats] = useState<UserStats>({ streak: 0, xp: 0, hydrationCount: 0, lastHydrationUpdate: Date.now(), dailyCompletion: {} });
-  const [hydration, setHydration] = useState(0);
+  const [hydration, setHydrationState] = useState(0);
+  const [xpData, setXpData] = useState({ xp: 0, level: 1, maxXp: 1000 });
+  const [history, setHistory] = useState({ mind: [0,0,0,0,0,0,0], body: [0,0,0,0,0,0,0], study: [0,0,0,0,0,0,0] });
   const [sleepConfig, setSleepConfig] = useState({ bedtime: "22:00", duration: 8 });
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [storageType, setStorageType] = useState<'FOLDER' | 'BROWSER' | 'NONE'>('NONE');
@@ -122,6 +127,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [pandaState, setPandaState] = useState<PandaState>('IDLE');
   const [activeTab, setActiveTab] = useState<Tab>(Tab.HOME);
   const [schedulerDate, setSchedulerDate] = useState(new Date());
+
+  const setMainTask = useCallback((name: string, date: string) => {
+    setStats(prev => ({ ...prev, mainTask: { name, targetDate: date } }));
+  }, []);
+
+  const setDailyGoal = useCallback((goal: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    setStats(prev => ({ ...prev, dailyGoal: { goal, date: today } }));
+  }, []);
+
+  const setHydration = useCallback((val: number) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setHydrationState(val);
+    localStorage.setItem('pd_water_data', JSON.stringify({ count: val, date: today }));
+  }, []);
+
+  const addXP = useCallback((amount: number) => {
+    setXpData(prev => {
+      let newXp = prev.xp + amount;
+      let newLevel = prev.level;
+      let newMaxXp = prev.maxXp;
+
+      while (newXp >= newMaxXp) {
+        newXp -= newMaxXp;
+        newLevel++;
+      }
+
+      const newData = { xp: newXp, level: newLevel, maxXp: newMaxXp };
+      localStorage.setItem('pd_xp', JSON.stringify(newData));
+
+      const floatingXp = document.createElement('div');
+      floatingXp.innerText = `+${amount} XP`;
+      floatingXp.className = 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-yellow-500 font-black text-2xl z-[2000] pointer-events-none animate-xp-float';
+      document.body.appendChild(floatingXp);
+      setTimeout(() => floatingXp.remove(), 2000);
+
+      return newData;
+    });
+  }, []);
 
   const applyData = (data: UserVaultData) => {
     setUserName(data.userName || 'PandaUser');
@@ -254,10 +298,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateDailyCompletion = useCallback((taskList: Task[], targetDate: string) => {
-    const dayTasks = taskList.filter(t => t.startTime.startsWith(targetDate));
+    const dayTasks = taskList.filter(t => new Date(t.startTime).toLocaleDateString('en-CA') === targetDate);
     if (dayTasks.length === 0) return;
-    const completed = dayTasks.filter(t => t.completed).length;
-    const percentage = Math.round((completed / dayTasks.length) * 100);
+    const totalMins = dayTasks.reduce((acc, t) => acc + t.durationMinutes, 0);
+    const completedMins = dayTasks.filter(t => t.completed).reduce((acc, t) => acc + t.durationMinutes, 0);
+    const percentage = Math.round((completedMins / totalMins) * 100);
     setStats(prev => ({ ...prev, dailyCompletion: { ...prev.dailyCompletion, [targetDate]: percentage } }));
   }, []);
 
@@ -267,7 +312,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let start = taskData.startTime || new Date().toISOString();
       if (taskData.isQuick) {
         const now = new Date();
-        now.setMinutes(Math.floor(now.getMinutes() / 15) * 15, 0, 0);
         start = now.toISOString();
         if (updated.some(t => t.startTime === start)) {
           let nextFree = new Date(start);
@@ -288,7 +332,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         repetitionStep: taskData.repetitionStep || 0,
       };
       const finalTasks = [...updated, newTask];
-      updateDailyCompletion(finalTasks, start.split('T')[0]);
+      updateDailyCompletion(finalTasks, new Date(start).toLocaleDateString('en-CA'));
       return finalTasks;
     });
   }, [updateDailyCompletion]);
@@ -312,7 +356,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     setTasks(prev => {
       const finalTasks = [...prev, ...newTasks];
-      Array.from(new Set(newTasks.map(nt => nt.startTime.split('T')[0]))).forEach(day => updateDailyCompletion(finalTasks, day));
+      Array.from(new Set(newTasks.map(nt => new Date(nt.startTime).toLocaleDateString('en-CA')))).forEach(day => updateDailyCompletion(finalTasks, day));
       return finalTasks;
     });
   }, [updateDailyCompletion]);
@@ -325,7 +369,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updated = [...prev];
       updated[idx] = { ...prev[idx], completed: isNowCompleted };
       if (isNowCompleted) {
-        setStats(s => ({ ...s, xp: s.xp + 50 }));
+        addXP(50);
         if (prev[idx].isSpacedRepetition) {
           const step = prev[idx].repetitionStep || 0;
           if (step < SPACED_INTERVALS.length) {
@@ -335,16 +379,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
       }
-      updateDailyCompletion(updated, prev[idx].startTime.split('T')[0]);
+      updateDailyCompletion(updated, new Date(prev[idx].startTime).toLocaleDateString('en-CA'));
       return updated;
     });
-  }, [updateDailyCompletion]);
+  }, [updateDailyCompletion, addXP]);
 
   const deleteTask = (id: string) => {
     setTasks(prev => {
       const task = prev.find(t => t.id === id);
       const filtered = prev.filter(t => t.id !== id);
-      if (task) updateDailyCompletion(filtered, task.startTime.split('T')[0]);
+      if (task) updateDailyCompletion(filtered, new Date(task.startTime).toLocaleDateString('en-CA'));
       return filtered;
     });
   };
@@ -354,7 +398,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
   
   const copySchedule = useCallback((source: string, target: string, ids: string[]) => {
-    const sourceTasks = tasks.filter(t => t.startTime.startsWith(source) && ids.includes(t.id) && !t.isQuick && !t.isSpacedRepetition && !t.isMedicine);
+    const sourceTasks = tasks.filter(t => new Date(t.startTime).toLocaleDateString('en-CA') === source && ids.includes(t.id) && !t.isQuick && !t.isSpacedRepetition && !t.isMedicine);
     const newTasks = sourceTasks.map(t => {
       const orig = new Date(t.startTime);
       const next = new Date(target);
@@ -362,23 +406,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { ...t, id: Math.random().toString(36).substr(2, 9), startTime: next.toISOString(), completed: false };
     });
     setTasks(prev => {
-      const filtered = prev.filter(t => !t.startTime.startsWith(target) || !newTasks.some(nt => nt.startTime === t.startTime && !t.isMedicine));
+      const filtered = prev.filter(t => new Date(t.startTime).toLocaleDateString('en-CA') !== target || !newTasks.some(nt => nt.startTime === t.startTime && !t.isMedicine));
       const final = [...filtered, ...newTasks];
       updateDailyCompletion(final, target);
       return final;
     });
   }, [tasks, updateDailyCompletion]);
 
-  const setMainTask = (name: string, date: string) => setStats(prev => ({ ...prev, mainTask: { name, targetDate: date } }));
-  const addXP = (amount: number) => setStats(prev => ({ ...prev, xp: prev.xp + amount }));
+  useEffect(() => {
+    const today = new Date().toLocaleDateString('en-CA');
+    
+    // Water Init
+    const savedWater = localStorage.getItem('pd_water_data');
+    if (savedWater) {
+      const parsed = JSON.parse(savedWater);
+      if (parsed.date === today) setHydrationState(parsed.count);
+      else setHydration(0);
+    } else {
+      setHydration(0);
+    }
+
+    // XP Init
+    const savedXp = localStorage.getItem('pd_xp');
+    if (savedXp) setXpData(JSON.parse(savedXp));
+
+    // History Init
+    const mHist = JSON.parse(localStorage.getItem('pd_mind_history') || '[0,0,0,0,0,0,0]');
+    const bHist = JSON.parse(localStorage.getItem('pd_body_history') || '[0,0,0,0,0,0,0]');
+    const sHist = JSON.parse(localStorage.getItem('pd_study_history') || localStorage.getItem('pd_spirit_history') || '[0,0,0,0,0,0,0]');
+    setHistory({ mind: mHist, body: bHist, study: sHist });
+  }, [addXP]);
+
+  // Daily History Update
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const today = new Date().toLocaleDateString('en-CA');
+    
+    const calcScore = (cat: string) => {
+      const todayTasks = tasks.filter(t => new Date(t.startTime).toLocaleDateString('en-CA') === today);
+      if (todayTasks.length === 0) return 0;
+      return Math.round((todayTasks.filter(t => t.completed).length / todayTasks.length) * 100);
+    };
+
+    setHistory(prev => {
+      const lastUpdate = localStorage.getItem('pd_last_history_update');
+      const newMind = [...prev.mind];
+      const newBody = [...prev.body];
+      const newStudy = [...prev.study];
+
+      if (lastUpdate !== today) {
+        // New day: shift and add today's initial score
+        newMind.shift();
+        newMind.push(calcScore('Mind'));
+        newBody.shift();
+        newBody.push(calcScore('Body'));
+        newStudy.shift();
+        newStudy.push(calcScore('Study'));
+        localStorage.setItem('pd_last_history_update', today);
+      } else {
+        // Same day: update the last element with current score
+        newMind[newMind.length - 1] = calcScore('Mind');
+        newBody[newBody.length - 1] = calcScore('Body');
+        newStudy[newStudy.length - 1] = calcScore('Study');
+      }
+
+      localStorage.setItem('pd_mind_history', JSON.stringify(newMind));
+      localStorage.setItem('pd_body_history', JSON.stringify(newBody));
+      localStorage.setItem('pd_study_history', JSON.stringify(newStudy));
+
+      return { mind: newMind, body: newBody, study: newStudy };
+    });
+  }, [isInitialized, tasks]);
 
   return (
     <AppContext.Provider value={{
       tasks, addTask, addMedicineSchedule, toggleTask, deleteTask, updateTask, copySchedule,
-      stats, addXP, pandaState, setPandaState, activeTab, setActiveTab,
+      stats, xpData, addXP, history, pandaState, setPandaState, activeTab, setActiveTab,
       hydration, setHydration, sleepConfig, setSleepConfig,
       userName, setUserName, remindersEnabled, setRemindersEnabled,
-      schedulerDate, setSchedulerDate, setMainTask, isInitialized,
+      schedulerDate, setSchedulerDate, setMainTask, setDailyGoal, isInitialized,
       currentUser, login, signup, logout, exportData, importData, clearAllData,
       userLocation, startDate, storageType, vaultFiles
     }}>

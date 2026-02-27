@@ -6,7 +6,7 @@ import { useApp } from '../state';
 import { CATEGORY_COLORS, CategoryType, Tab } from '../types';
 
 const HomeTab: React.FC = () => {
-  const { tasks, addTask, addMedicineSchedule, toggleTask, hydration, setHydration, setActiveTab, userName, sleepConfig } = useApp();
+  const { tasks, addTask, addMedicineSchedule, toggleTask, hydration, setHydration, setActiveTab, userName, sleepConfig, xpData } = useApp();
   const [fastTask, setFastTask] = useState('');
   const [fastCategory, setFastCategory] = useState<CategoryType>('Mind');
 
@@ -16,12 +16,15 @@ const HomeTab: React.FC = () => {
   
   const todayStr = useMemo(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return now.toLocaleDateString('en-CA'); // Returns YYYY-MM-DD in local time
   }, []);
 
   const todaysTasks = useMemo(() => {
     return tasks
-      .filter(t => t.startTime.startsWith(todayStr))
+      .filter(t => {
+        const taskDate = new Date(t.startTime).toLocaleDateString('en-CA');
+        return taskDate === todayStr;
+      })
       .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
   }, [tasks, todayStr]);
 
@@ -35,10 +38,23 @@ const HomeTab: React.FC = () => {
     return Math.round((todaysTasks.filter(t => t.completed).length / todaysTasks.length) * 100);
   }, [todaysTasks]);
 
+  const wastedHours = useMemo(() => {
+    const now = new Date().getTime();
+    const wastedMins = todaysTasks
+      .filter(t => !t.completed && (new Date(t.startTime).getTime() + (t.durationMinutes * 60000)) < now)
+      .reduce((acc, t) => acc + t.durationMinutes, 0);
+    return (wastedMins / 60).toFixed(1);
+  }, [todaysTasks]);
+
   const distributionData = useMemo(() => {
     const TOTAL_SLOTS = 288;
-    const counts: Record<string, number> = {
-      'Sleep': 0, 'Mind': 0, 'Body': 0, 'Study': 0, 'Medicine': 0, 'Free Time': 0
+    const counts: Record<string, { total: number, completed: number }> = {
+      'Sleep': { total: 0, completed: 0 },
+      'Mind': { total: 0, completed: 0 },
+      'Body': { total: 0, completed: 0 },
+      'Study': { total: 0, completed: 0 },
+      'Medicine': { total: 0, completed: 0 },
+      'Free Time': { total: 0, completed: 0 }
     };
 
     const [bHour, bMin] = sleepConfig.bedtime.split(':').map(Number);
@@ -53,32 +69,63 @@ const HomeTab: React.FC = () => {
       const endMins = startMins + task.durationMinutes;
       const startSlot = Math.floor(startMins / 5);
       const endSlot = Math.ceil(endMins / 5);
-      for (let s = startSlot; s < endSlot && s < TOTAL_SLOTS; s++) taskSlotMap[s] = task.category;
+      for (let s = startSlot; s < endSlot && s < TOTAL_SLOTS; s++) {
+        taskSlotMap[s] = { category: task.category, completed: task.completed };
+      }
     });
+
+    const now = new Date();
+    const currentTotalMins = now.getHours() * 60 + now.getMinutes();
 
     for (let slot = 0; slot < TOTAL_SLOTS; slot++) {
       const currentMin = slot * 5;
       let isSleep = bedtimeMins < wakeMins ? (currentMin >= bedtimeMins && currentMin < wakeMins) : (currentMin >= bedtimeMins || currentMin < wakeMins);
-      if (isSleep) counts['Sleep']++;
-      else {
-        const cat = taskSlotMap[slot];
-        if (cat === 'Mind') counts['Mind']++;
-        else if (cat === 'Body') counts['Body']++;
-        else if (cat === 'Spirit') counts['Study']++;
-        else if (cat === 'Medicine') counts['Medicine']++;
-        else counts['Free Time']++;
+      
+      if (isSleep) {
+        counts['Sleep'].total++;
+        // Sleep is "completed" if current time is past the slot
+        if (currentMin < currentTotalMins || (bedtimeMins > wakeMins && currentMin >= bedtimeMins)) {
+           counts['Sleep'].completed++;
+        }
+      } else {
+        const slotData = taskSlotMap[slot];
+        if (slotData) {
+          const cat = slotData.category === 'Spirit' ? 'Study' : slotData.category;
+          if (counts[cat]) {
+            counts[cat].total++;
+            if (slotData.completed) counts[cat].completed++;
+          }
+        } else {
+          counts['Free Time'].total++;
+          if (currentMin < currentTotalMins) counts['Free Time'].completed++;
+        }
       }
     }
 
     return [
-      { name: 'Sleep', value: counts['Sleep'], color: CATEGORY_COLORS['Sleep'] },
-      { name: 'Mind', value: counts['Mind'], color: CATEGORY_COLORS['Mind'] },
-      { name: 'Body', value: counts['Body'], color: CATEGORY_COLORS['Body'] },
-      { name: 'Study', value: counts['Study'], color: CATEGORY_COLORS['Spirit'] },
-      { name: 'Medicine', value: counts['Medicine'], color: CATEGORY_COLORS['Medicine'] },
-      { name: 'Free', value: counts['Free Time'], color: '#E2E8F0' }
+      { name: 'Sleep', value: counts['Sleep'].total, completed: counts['Sleep'].completed, color: CATEGORY_COLORS['Sleep'] },
+      { name: 'Mind', value: counts['Mind'].total, completed: counts['Mind'].completed, color: CATEGORY_COLORS['Mind'] },
+      { name: 'Body', value: counts['Body'].total, completed: counts['Body'].completed, color: CATEGORY_COLORS['Body'] },
+      { name: 'Study', value: counts['Study'].total, completed: counts['Study'].completed, color: CATEGORY_COLORS['Study'] },
+      { name: 'Medicine', value: counts['Medicine'].total, completed: counts['Medicine'].completed, color: CATEGORY_COLORS['Medicine'] },
+      { name: 'Free', value: counts['Free Time'].total, completed: counts['Free Time'].completed, color: '#E2E8F0' }
     ].filter(d => d.value > 0);
   }, [todaysTasks, sleepConfig]);
+
+  const freeTimeMins = useMemo(() => {
+    const freeData = distributionData.find(d => d.name === 'Free');
+    // We count "completed" free time as "wasted" time that has already passed
+    return freeData ? freeData.completed * 5 : 0;
+  }, [distributionData]);
+
+  const freeTimeHours = (freeTimeMins / 60).toFixed(1);
+
+  const mindTaskStatus = useMemo(() => {
+    const mindTasks = todaysTasks.filter(t => t.category === 'Mind');
+    if (mindTasks.length === 0) return 'NOT_BOOKED';
+    if (mindTasks.every(t => !t.completed)) return 'NOT_COMPLETED';
+    return 'OK';
+  }, [todaysTasks]);
 
   const handleFastTask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,13 +152,72 @@ const HomeTab: React.FC = () => {
           </div>
           <p className="text-sm font-bold text-[#49454F] opacity-70">Vault Status: Optimized</p>
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end">
+            <div className="bg-gradient-to-r from-yellow-400 to-amber-500 px-3 py-1 rounded-full shadow-sm border border-yellow-300/50">
+              <span className="text-[10px] font-black text-white uppercase tracking-wider">LVL {xpData.level}</span>
+            </div>
+            <div className="mt-1.5 space-y-0.5">
+              <div className="w-[140px] h-1.5 bg-gray-200 rounded-full overflow-hidden border border-white/50">
+                <div 
+                  className="h-full bg-gradient-to-r from-yellow-400 to-amber-500 transition-all duration-1000" 
+                  style={{ width: `${(xpData.xp / xpData.maxXp) * 100}%` }} 
+                />
+              </div>
+              <div className="text-[8px] font-black text-gray-400 text-right uppercase tracking-tighter">
+                {xpData.xp} / {xpData.maxXp} XP
+              </div>
+            </div>
+          </div>
           <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">
             <HardDrive size={12} className="text-emerald-600" />
             <span className="text-[9px] font-black text-emerald-700 uppercase">Secured</span>
           </div>
         </div>
       </div>
+
+      {/* Guilt Trip Mode */}
+      {(parseFloat(wastedHours) > 0 || parseFloat(freeTimeHours) > 2.5 || mindTaskStatus !== 'OK') && (
+        <div className="bg-red-950 text-red-100 p-6 rounded-[2.5rem] border border-red-500/30 shadow-2xl relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 opacity-10 group-hover:scale-110 transition-transform duration-700">
+            <Clock size={120} />
+          </div>
+          <div className="relative z-10 flex items-center gap-6">
+            <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-red-900/50">
+              <Zap size={32} className="text-white animate-pulse" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-black uppercase tracking-tighter">Guilt Trip Active</h3>
+              
+              {parseFloat(wastedHours) > 0 && (
+                <p className="text-sm font-bold opacity-70">
+                  You've already wasted <span className="text-red-400 font-black text-lg">{wastedHours} hours</span> today by skipping missions. 
+                  The clock doesn't stop for anyone.
+                </p>
+              )}
+
+              {parseFloat(freeTimeHours) > 2.5 && (
+                <p className="text-sm font-bold opacity-70">
+                  today i wasted my {freeTimeHours} hours of free time. 
+                  rembember gate is not about intellligence its about concistancy.
+                </p>
+              )}
+
+              {mindTaskStatus === 'NOT_BOOKED' && (
+                <p className="text-sm font-bold opacity-70 italic">
+                  No Mind sessions booked. u must have tokeep movie forword.
+                </p>
+              )}
+
+              {mindTaskStatus === 'NOT_COMPLETED' && (
+                <p className="text-sm font-bold opacity-70 italic">
+                  Mind sessions are pending. u must have tokeep movie forword.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Next Up Priority Card */}
       {nextTask && (
@@ -208,21 +314,67 @@ const HomeTab: React.FC = () => {
       </div>
 
       {/* Composition Chart */}
-      <div className="m3-card p-6 bg-white">
+      <div className="m3-card p-6 bg-white shadow-sm border border-gray-100">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="font-black text-[#1C1B1F] text-sm">Time Allocation</h3>
+          <div className="flex items-center gap-2">
+            <Clock size={18} className="text-indigo-500" />
+            <h3 className="font-black text-[#1C1B1F] text-sm uppercase tracking-tight">Time Allocation</h3>
+          </div>
           <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">{completionPercentage}% Success Rate</span>
         </div>
-        <div className="w-full h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={distributionData} innerRadius={55} outerRadius={75} paddingAngle={4} dataKey="value" stroke="none">
-                {distributionData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-              </Pie>
-              <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', fontWeight: 'bold' }} />
-              <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ fontSize: '9px', fontWeight: '900', textTransform: 'uppercase' }} />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="flex items-center gap-4">
+          <div className="w-1/2 h-48 relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie 
+                  data={distributionData} 
+                  innerRadius={55} 
+                  outerRadius={75} 
+                  paddingAngle={6} 
+                  dataKey="value" 
+                  stroke="none" 
+                  cornerRadius={6}
+                >
+                  {distributionData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                </Pie>
+                <RechartsTooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', fontWeight: 'bold', fontSize: '10px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} 
+                  formatter={(value: number, name: string, props: any) => {
+                    const item = props.payload;
+                    return [`${Math.round((item.completed / 12) * 10) / 10} / ${Math.round((item.value / 12) * 10) / 10}h`, 'Progress'];
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-xl font-black text-gray-800">{completionPercentage}%</span>
+              <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Done</span>
+            </div>
+          </div>
+          <div className="w-1/2 space-y-3">
+            {distributionData.map((item) => (
+              <div key={item.name} className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: item.color }} />
+                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">{item.name}</span>
+                  </div>
+                  <span className="text-[9px] font-black text-gray-800">{Math.round((item.completed / 12) * 10) / 10}h</span>
+                </div>
+                <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full transition-all duration-1000 relative" 
+                    style={{ 
+                      width: `${(item.completed / item.value) * 100}%`,
+                      backgroundColor: item.color 
+                    }} 
+                  >
+                    <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -235,8 +387,8 @@ const HomeTab: React.FC = () => {
         <form onSubmit={handleFastTask} className="space-y-4">
           <input type="text" value={fastTask} onChange={(e) => setFastTask(e.target.value)} placeholder="Quick entry..." className="w-full bg-white px-5 py-4 rounded-2xl outline-none font-bold" />
           <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-            {(Object.keys(CATEGORY_COLORS) as CategoryType[]).filter(c => c !== 'Medicine' && c !== 'Sleep').map(cat => (
-              <button key={cat} type="button" onClick={() => setFastCategory(cat)} className={`px-4 py-2 rounded-full text-[10px] font-black whitespace-nowrap transition-all ${fastCategory === cat ? 'bg-[#21005D] text-white shadow-md' : 'bg-white text-[#49454F]'}`}>{cat === 'Spirit' ? 'Study' : cat}</button>
+            {(['Mind', 'Body', 'Study'] as CategoryType[]).map(cat => (
+              <button key={cat} type="button" onClick={() => setFastCategory(cat)} className={`px-4 py-2 rounded-full text-[10px] font-black whitespace-nowrap transition-all ${fastCategory === cat ? 'bg-[#21005D] text-white shadow-md' : 'bg-white text-[#49454F]'}`}>{cat}</button>
             ))}
           </div>
           <button type="submit" className="w-full bg-[#6750A4] text-white py-4 rounded-2xl font-black text-sm shadow-lg">LAUNCH NOW</button>

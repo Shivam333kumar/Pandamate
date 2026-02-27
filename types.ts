@@ -1,5 +1,5 @@
 
-export type CategoryType = 'Mind' | 'Body' | 'Spirit' | 'Sleep' | 'Break' | 'Medicine';
+export type CategoryType = 'Mind' | 'Body' | 'Study' | 'Sleep' | 'Break' | 'Medicine';
 
 export interface MainTask {
   name: string;
@@ -26,6 +26,7 @@ export interface UserStats {
   lastHydrationUpdate: number;
   dailyCompletion: Record<string, number>; // "YYYY-MM-DD": percentage
   mainTask?: MainTask;
+  dailyGoal?: { goal: string; date: string };
 }
 
 export type PandaState = 'IDLE' | 'MEDITATING' | 'READING' | 'EXERCISING' | 'PLAYING' | 'SHOCKED' | 'HIDING' | 'SLEEPING';
@@ -42,9 +43,9 @@ export enum Tab {
 export const CATEGORY_COLORS: Record<CategoryType, string> = {
   Mind: '#8B5FBF',
   Body: '#48BB78',
-  Spirit: '#4299E1',
+  Study: '#F6AD55',
   Sleep: '#4FD1C7',
-  Break: '#F6AD55',
+  Break: '#CBD5E0',
   Medicine: '#EF4444'
 };
 

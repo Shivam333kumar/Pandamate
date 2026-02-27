@@ -43,6 +43,88 @@ const AlarmOverlay: React.FC<{ alarm: Task; onTaken: () => void }> = ({ alarm, o
   </div>
 );
 
+const EmergencyMedicineOverlay: React.FC<{ missedMeds: Task[]; onAcknowledge: (id: string) => void }> = ({ missedMeds, onAcknowledge }) => (
+  <div className="fixed inset-0 z-[2000] bg-red-950 flex items-center justify-center p-6 overflow-y-auto">
+    <div className="w-full max-w-lg bg-white rounded-[3rem] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-500 border-8 border-red-600">
+      <div className="text-center space-y-4">
+        <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+          <AlertCircle className="text-red-600" size={60} />
+        </div>
+        <h2 className="text-4xl font-black text-red-600 tracking-tighter uppercase">🚨 EMERGENCY ALERT</h2>
+        <p className="text-xl font-bold text-gray-800">MISSED MEDICINE PROTOCOL</p>
+      </div>
+
+      <div className="space-y-4">
+        {missedMeds.map(med => (
+          <div key={med.id} className="bg-red-50 p-6 rounded-3xl border-2 border-red-200">
+            <h3 className="text-2xl font-black text-red-900 mb-2">{med.name}</h3>
+            <p className="text-sm font-bold text-red-700 uppercase">
+              Scheduled: {new Date(med.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+            <p className="text-xs font-bold text-red-500 mt-1">Take it NOW if safe to do so.</p>
+            <div className="grid grid-cols-1 gap-2 mt-4">
+              <button 
+                onClick={() => onAcknowledge(med.id)}
+                className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg active:scale-95 transition-all"
+              >
+                ✅ MARK AS TAKEN NOW
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      <p className="text-[10px] font-black text-gray-400 text-center uppercase tracking-widest">
+        The app is locked until protocol is acknowledged.
+      </p>
+    </div>
+  </div>
+);
+
+const DailyGoalLock: React.FC = () => {
+  const { setDailyGoal, userName } = useApp();
+  const [goal, setGoal] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (goal.trim()) {
+      setDailyGoal(goal.trim());
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[600] bg-emerald-950 flex items-center justify-center p-6">
+      <div className="w-full max-w-md bg-white rounded-[3rem] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-500">
+        <div className="text-center space-y-2">
+          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Key className="text-emerald-600" size={40} />
+          </div>
+          <h2 className="text-3xl font-black text-gray-800 tracking-tight">Daily Focus Lock</h2>
+          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">
+            What is your #1 priority today, {userName}?
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <textarea
+            required
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            placeholder="Type your main goal here..."
+            className="w-full bg-gray-50 p-6 rounded-2xl outline-none border border-gray-100 font-bold text-lg focus:ring-4 focus:ring-emerald-100 transition-all min-h-[120px] resize-none"
+          />
+          <button
+            type="submit"
+            className="w-full bg-emerald-600 text-white py-5 rounded-3xl font-black text-sm shadow-xl shadow-emerald-200 active:scale-95 transition-all"
+          >
+            UNLOCK MY DAY
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const AuthScreen: React.FC = () => {
   const { login, signup } = useApp();
   const [isLogin, setIsLogin] = useState(true);
@@ -141,11 +223,25 @@ const AuthScreen: React.FC = () => {
 };
 
 const AppContent: React.FC = () => {
-  const { activeTab, isInitialized, tasks, toggleTask, currentUser } = useApp();
+  const { activeTab, isInitialized, tasks, toggleTask, currentUser, stats } = useApp();
   const [activeAlarm, setActiveAlarm] = useState<Task | null>(null);
   const alarmAudio = useRef<HTMLAudioElement | null>(null);
   const notifiedTasks = useRef<Set<string>>(new Set());
+  const notifiedBattleOfSelf = useRef<string | null>(null);
   const lastCheckedDay = useRef<string>(new Date().toISOString().split('T')[0]);
+
+  const today = new Date().toISOString().split('T')[0];
+  const hasGoalForToday = stats.dailyGoal && stats.dailyGoal.date === today;
+
+  const missedMedicines = useMemo(() => {
+    if (!isInitialized) return [];
+    const now = new Date();
+    return tasks.filter(t => 
+      t.isMedicine && 
+      !t.completed && 
+      new Date(t.startTime).getTime() < now.getTime() - (5 * 60000) // 5 mins overdue
+    );
+  }, [tasks, isInitialized]);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -166,13 +262,43 @@ const AppContent: React.FC = () => {
       const now = new Date();
       const currentHours = now.getHours();
       const currentMinutes = now.getMinutes();
-      const todayStr = now.toISOString().split('T')[0];
+      const todayStr = now.toLocaleDateString('en-CA');
       
       if (lastCheckedDay.current !== todayStr) {
         notifiedTasks.current.clear();
+        notifiedBattleOfSelf.current = null;
         lastCheckedDay.current = todayStr;
       }
       
+      const showNotification = (title: string, options: NotificationOptions) => {
+        if (Notification.permission === "granted") {
+          if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.ready.then(registration => {
+              registration.showNotification(title, options);
+            });
+          } else {
+            new Notification(title, options);
+          }
+        }
+      };
+
+      // Battle of Self Notification (Before first task)
+      const todaysTasks = tasks.filter(t => new Date(t.startTime).toLocaleDateString('en-CA') === todayStr);
+      if (todaysTasks.length > 0 && notifiedBattleOfSelf.current !== todayStr) {
+        const firstTask = [...todaysTasks].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())[0];
+        const firstTaskTime = new Date(firstTask.startTime).getTime();
+        const tenMinsBefore = firstTaskTime - (10 * 60 * 1000);
+        
+        if (now.getTime() >= tenMinsBefore && now.getTime() < firstTaskTime) {
+          showNotification("Get ready for the battle of self", {
+            body: `Your first mission "${firstTask.name}" starts in 10 minutes. Prepare yourself.`,
+            icon: "https://cdn-icons-png.flaticon.com/512/2966/2966327.png",
+            tag: "battle-of-self",
+          });
+          notifiedBattleOfSelf.current = todayStr;
+        }
+      }
+
       const dueMed = tasks.find(t => {
         if (!t.isMedicine || t.completed) return false;
         const tDate = new Date(t.startTime);
@@ -182,14 +308,12 @@ const AppContent: React.FC = () => {
 
       if (dueMed && activeAlarm?.id !== dueMed.id) {
         setActiveAlarm(dueMed);
-        if (Notification.permission === "granted") {
-          new Notification("💊 MEDICINE REMINDER", {
-            body: `Time for your ${dueMed.name}. Protocol active.`,
-            icon: "https://cdn-icons-png.flaticon.com/512/2966/2966327.png",
-            tag: "medicine-alarm",
-            requireInteraction: true,
-          });
-        }
+        showNotification(`${dueMed.name} ${dueMed.category} #started lets go`, {
+          body: `Protocol Active: Time for your ${dueMed.name}.`,
+          icon: "https://cdn-icons-png.flaticon.com/512/2966/2966327.png",
+          tag: "medicine-alarm",
+          requireInteraction: true,
+        });
       }
 
       // CHANGE 1: Push Notifications When a New Slot Starts
@@ -200,20 +324,14 @@ const AppContent: React.FC = () => {
         
         if (tDateStr === todayStr && tDate.getHours() === currentHours && tDate.getMinutes() === currentMinutes) {
           if (!notifiedTasks.current.has(task.id)) {
-            const showNotification = (title: string, options: NotificationOptions) => {
-              if (Notification.permission === "granted") {
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                  navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(title, options);
-                  });
-                } else {
-                  new Notification(title, options);
-                }
-              }
-            };
+            // Skip if it was already handled by the medicine alarm logic above to avoid double notification
+            if (dueMed?.id === task.id) {
+              notifiedTasks.current.add(task.id);
+              return;
+            }
 
-            showNotification(`${task.name} started`, {
-              body: `Your scheduled task "${task.name}" has begun.`,
+            showNotification(`${task.name} ${task.category} #started lets go`, {
+              body: `Your ${task.category} session "${task.name}" has officially begun. Lets go!`,
               icon: "https://cdn-icons-png.flaticon.com/512/2966/2966327.png",
               tag: `task-start-${task.id}`,
             });
@@ -264,6 +382,13 @@ const AppContent: React.FC = () => {
 
   return (
     <Layout>
+      {missedMedicines.length > 0 && (
+        <EmergencyMedicineOverlay 
+          missedMeds={missedMedicines} 
+          onAcknowledge={(id) => toggleTask(id)} 
+        />
+      )}
+      {!hasGoalForToday && <DailyGoalLock />}
       <div className="h-full overflow-y-auto no-scrollbar pt-4">
         {renderTab()}
       </div>

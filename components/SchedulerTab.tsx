@@ -5,7 +5,7 @@ import { useApp } from '../state';
 import { CATEGORY_COLORS, CategoryType, Task } from '../types';
 
 const SchedulerTab: React.FC = () => {
-  const { tasks, addTask, toggleTask, updateTask, sleepConfig, copySchedule, schedulerDate, setSchedulerDate } = useApp();
+  const { tasks, addTask, toggleTask, updateTask, deleteTask, sleepConfig, copySchedule, schedulerDate, setSchedulerDate } = useApp();
   const [showDrawer, setShowDrawer] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -28,16 +28,30 @@ const SchedulerTab: React.FC = () => {
   }, []);
 
   const activeDateStr = useMemo(() => {
-    return `${schedulerDate.getFullYear()}-${String(schedulerDate.getMonth() + 1).padStart(2, '0')}-${String(schedulerDate.getDate()).padStart(2, '0')}`;
+    return schedulerDate.toLocaleDateString('en-CA');
   }, [schedulerDate]);
 
   const displayedTasks = useMemo(() => {
     return tasks.filter(t => {
-      const d = new Date(t.startTime);
-      const taskDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const taskDateStr = new Date(t.startTime).toLocaleDateString('en-CA');
       return taskDateStr === activeDateStr;
     });
   }, [tasks, activeDateStr]);
+
+  const visibleSlots = useMemo(() => {
+    const today = new Date().toLocaleDateString('en-CA');
+    if (activeDateStr !== today) return slots;
+    
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    
+    // Show slots from now onwards. We give a 15 min grace period to see current task.
+    return slots.filter(time => {
+      const [h, m] = time.split(':').map(Number);
+      const slotMins = h * 60 + m;
+      return slotMins >= currentMins - 15;
+    });
+  }, [slots, activeDateStr]);
 
   const handleOpenDrawer = () => {
     setEditingTask(null);
@@ -168,7 +182,7 @@ const SchedulerTab: React.FC = () => {
 
       {/* Timeline Slots */}
       <div className="flex-1 overflow-y-auto no-scrollbar space-y-1 relative pr-1 pb-10">
-        {slots.map((time) => {
+        {visibleSlots.map((time) => {
           const [h, m] = time.split(':').map(Number);
           const currentSlotMins = h * 60 + m;
 
@@ -211,16 +225,28 @@ const SchedulerTab: React.FC = () => {
                         <span className={`font-black text-[11px] truncate ${taskAtSlot.completed ? 'line-through' : ''}`}>
                           {taskAtSlot.name}
                         </span>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditTask(taskAtSlot);
-                          }}
-                          className="p-1 hover:bg-white/20 rounded-lg transition-colors shrink-0"
-                          title="Edit Mission"
-                        >
-                          <Edit2 size={10} />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditTask(taskAtSlot);
+                            }}
+                            className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+                            title="Edit Mission"
+                          >
+                            <Edit2 size={10} />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm('Delete this mission?')) deleteTask(taskAtSlot.id);
+                            }}
+                            className="p-1 hover:bg-red-400/40 rounded-lg transition-colors text-red-100"
+                            title="Delete Mission"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5">
                          <span className="text-[8px] font-bold opacity-80 uppercase tracking-tighter">
@@ -320,7 +346,7 @@ const SchedulerTab: React.FC = () => {
                 className="w-full bg-white/50 p-4 rounded-2xl outline-none border border-gray-100 font-bold focus:ring-4 focus:ring-emerald-100 transition-all shadow-sm" 
               />
               <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-                {(Object.keys(CATEGORY_COLORS) as CategoryType[]).filter(c => c !== 'Medicine' && c !== 'Sleep').map(cat => (
+                {(['Mind', 'Body', 'Study'] as CategoryType[]).map(cat => (
                   <button 
                     key={cat} 
                     type="button"

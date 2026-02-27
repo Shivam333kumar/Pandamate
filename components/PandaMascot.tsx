@@ -40,7 +40,7 @@ const PandaMascot: React.FC<PandaMascotProps> = ({ size = 'small', staticPositio
       const cat = currentTask.category;
       if (cat === 'Mind') setPandaState('MEDITATING');
       else if (cat === 'Body') setPandaState('EXERCISING');
-      else if (cat === 'Spirit') setPandaState('READING');
+      else if (cat === 'Study') setPandaState('READING');
       else if (cat === 'Sleep') setPandaState('SLEEPING');
       else setPandaState('IDLE');
     } else if (!isWalking && pandaState !== 'PLAYING' && pandaState !== 'SHOCKED' && pandaState !== 'HIDING') {
