@@ -88,21 +88,8 @@ export function generateSchedule(plan: ExamPlan): Task[] {
   lastStudyDate.setDate(lastStudyDate.getDate() - bufferDays);
 
   while (curr < lastStudyDate) {
-    if (curr.getDay() !== 0) { // Skip Sundays
-      availableDates.push(curr.toISOString().split('T')[0]);
-    }
+    availableDates.push(curr.toISOString().split('T')[0]);
     curr.setDate(curr.getDate() + 1);
-  }
-
-  // Emergency mode: if too few days, include Sundays
-  if (availableDates.length < 3) {
-    availableDates.length = 0;
-    curr = new Date(today);
-    curr.setDate(curr.getDate() + 1);
-    while (curr < lastStudyDate) {
-      availableDates.push(curr.toISOString().split('T')[0]);
-      curr.setDate(curr.getDate() + 1);
-    }
   }
 
   if (availableDates.length === 0) return [];

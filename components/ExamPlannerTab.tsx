@@ -526,7 +526,7 @@ const ExamPlannerTab: React.FC = () => {
               <div className="space-y-1">
                 <h4 className="text-sm font-black text-orange-800 uppercase tracking-tight">Schedule Warning</h4>
                 <p className="text-xs font-bold text-orange-700/70 leading-relaxed">
-                  Panda Mate will distribute these topics greedily. Sundays are reserved for rest unless your exam is extremely close.
+                  Panda Mate will distribute these topics greedily across all available days to ensure maximum coverage.
                 </p>
               </div>
             </div>
@@ -709,7 +709,7 @@ const ExamPlannerTab: React.FC = () => {
               </div>
               <div>
                 <p className="font-black text-gray-400 uppercase text-xs">No Study Missions Today</p>
-                <p className="text-[10px] font-bold text-gray-300 uppercase mt-1">Rest day or revision buffer active</p>
+                <p className="text-[10px] font-bold text-gray-300 uppercase mt-1">Revision buffer active or schedule complete</p>
               </div>
             </div>
           )}
