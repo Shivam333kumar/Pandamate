@@ -1,18 +1,47 @@
 
 import React, { useState, useMemo } from 'react';
-import { Plus, Clock, RefreshCw, Copy, Check, X, Save, ChevronLeft, ChevronRight, Calendar, Pill, Moon, History, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Clock, RefreshCw, Copy, Check, X, Save, ChevronLeft, ChevronRight, Calendar, Pill, Moon, History, Trash2, Edit2, Target, GraduationCap } from 'lucide-react';
 import { useApp } from '../state';
-import { CATEGORY_COLORS, CategoryType, Task } from '../types';
+import { CATEGORY_COLORS, CategoryType, Task, SyllabusTopic } from '../types';
 
 const SchedulerTab: React.FC = () => {
-  const { tasks, addTask, toggleTask, updateTask, deleteTask, sleepConfig, copySchedule, schedulerDate, setSchedulerDate } = useApp();
+  const { tasks, addTask, toggleTask, updateTask, deleteTask, sleepConfig, copySchedule, schedulerDate, setSchedulerDate, examPlans, stats, setFocusSubjects } = useApp();
   const [showDrawer, setShowDrawer] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
+  const [showFocusModal, setShowFocusModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   
   const [newTaskName, setNewTaskName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('Mind');
   const [isSpaced, setIsSpaced] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [selectedTopic, setSelectedTopic] = useState<string>('');
+  const [isRevision, setIsRevision] = useState(false);
+  
+  // Focus Mode State
+  const [focusDays, setFocusDays] = useState(1);
+  const [focusSubs, setFocusSubs] = useState<string[]>(['', '']);
+
+  const activePlan = useMemo(() => examPlans.find(p => p.isActive), [examPlans]);
+  const currentFocuses = useMemo(() => {
+    if (!stats.focusSubjects || stats.focusSubjects.length === 0) return null;
+    return stats.focusSubjects.filter(f => new Date(f.endDate) >= new Date());
+  }, [stats.focusSubjects]);
+
+  const subjects = useMemo(() => {
+    if (!activePlan) return [];
+    const allSubs = Array.from(new Set(activePlan.topics.map(t => t.subject)));
+    if (currentFocuses && currentFocuses.length > 0) {
+      const focusedNames = currentFocuses.map(f => f.subject);
+      return allSubs.filter(s => focusedNames.includes(s));
+    }
+    return allSubs;
+  }, [activePlan, currentFocuses]);
+
+  const filteredTopics = useMemo(() => {
+    if (!activePlan || !selectedSubject) return [];
+    return activePlan.topics.filter(t => t.subject === selectedSubject && !t.completed);
+  }, [activePlan, selectedSubject]);
   
   // NEW: State for multiple slot selection
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
@@ -58,6 +87,9 @@ const SchedulerTab: React.FC = () => {
     setNewTaskName('');
     setSelectedCategory('Mind');
     setIsSpaced(false);
+    setSelectedSubject(currentFocuses?.[0]?.subject || subjects[0] || '');
+    setSelectedTopic('');
+    setIsRevision(false);
     setShowDrawer(true);
   };
 
@@ -70,11 +102,20 @@ const SchedulerTab: React.FC = () => {
   };
 
   const handleSaveTask = () => {
-    if (!newTaskName.trim()) return;
+    let finalName = newTaskName;
+    if (selectedCategory === 'Study') {
+      if (isRevision) {
+        finalName = `Revision: ${selectedSubject}`;
+      } else if (selectedTopic) {
+        finalName = selectedTopic;
+      }
+    }
+
+    if (!finalName.trim()) return;
     
     if (editingTask) {
       updateTask(editingTask.id, {
-        name: newTaskName,
+        name: finalName,
         category: selectedCategory,
         isSpacedRepetition: isSpaced
       });
@@ -93,11 +134,11 @@ const SchedulerTab: React.FC = () => {
       }
       
       addTask({ 
-        name: newTaskName, 
+        name: finalName, 
         category: selectedCategory, 
         startTime: d.toISOString(), 
         durationMinutes: 15, 
-        isSpacedRepetition: isSpaced 
+        isSpacedRepetition: isSpaced || isRevision
       });
     });
 
@@ -175,6 +216,12 @@ const SchedulerTab: React.FC = () => {
         <div className="flex gap-2">
           <button onClick={openCopyModal} className="flex-1 flex items-center justify-center gap-2 bg-white/80 text-emerald-800 py-2.5 rounded-xl text-[10px] font-black border border-emerald-100 shadow-sm active:bg-emerald-50 transition-colors">
             <History size={12} /> Clone History Plan
+          </button>
+          <button 
+            onClick={() => setShowFocusModal(true)}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black border transition-all ${currentFocuses ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg' : 'bg-white/80 text-indigo-800 border-indigo-100 shadow-sm'}`}
+          >
+            <Target size={12} /> {currentFocuses ? `Focus: ${currentFocuses.map(f => f.subject).join(', ')}` : 'Set Subject Focus'}
           </button>
           <button onClick={() => setSchedulerDate(new Date())} className="px-4 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100 text-[10px] font-black active:scale-95 transition-all">Today</button>
         </div>
@@ -337,14 +384,63 @@ const SchedulerTab: React.FC = () => {
               {editingTask ? `Updating ${editingTask.name}` : (selectedSlots.length > 0 ? `Deploying to [${selectedSlots.length}] Slots` : `Deploying to ${activeDateStr}`)}
             </p>
             <div className="space-y-4">
-              <input 
-                type="text" 
-                placeholder="Mission Name" 
-                value={newTaskName} 
-                onChange={(e) => setNewTaskName(e.target.value)} 
-                autoFocus
-                className="w-full bg-white/50 p-4 rounded-2xl outline-none border border-gray-100 font-bold focus:ring-4 focus:ring-emerald-100 transition-all shadow-sm" 
-              />
+              {selectedCategory === 'Study' ? (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="flex p-1 bg-gray-100 rounded-2xl">
+                    <button 
+                      onClick={() => setIsRevision(false)}
+                      className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${!isRevision ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-400'}`}
+                    >
+                      New Topic
+                    </button>
+                    <button 
+                      onClick={() => setIsRevision(true)}
+                      className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${isRevision ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-400'}`}
+                    >
+                      Revision
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Subject</label>
+                    <select 
+                      value={selectedSubject}
+                      onChange={e => setSelectedSubject(e.target.value)}
+                      className="w-full bg-white/50 p-4 rounded-2xl outline-none border border-gray-100 font-bold text-sm focus:ring-4 focus:ring-emerald-100 transition-all shadow-sm appearance-none"
+                    >
+                      <option value="">Select Subject</option>
+                      {subjects.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {!isRevision && (
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Topic</label>
+                      <select 
+                        value={selectedTopic}
+                        onChange={e => setSelectedTopic(e.target.value)}
+                        className="w-full bg-white/50 p-4 rounded-2xl outline-none border border-gray-100 font-bold text-sm focus:ring-4 focus:ring-emerald-100 transition-all shadow-sm appearance-none"
+                      >
+                        <option value="">Select Topic</option>
+                        {filteredTopics.map(t => (
+                          <option key={t.id} value={t.name}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <input 
+                  type="text" 
+                  placeholder="Mission Name" 
+                  value={newTaskName} 
+                  onChange={(e) => setNewTaskName(e.target.value)} 
+                  autoFocus
+                  className="w-full bg-white/50 p-4 rounded-2xl outline-none border border-gray-100 font-bold focus:ring-4 focus:ring-emerald-100 transition-all shadow-sm" 
+                />
+              )}
               <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
                 {(['Mind', 'Body', 'Study'] as CategoryType[]).map(cat => (
                   <button 
@@ -378,6 +474,80 @@ const SchedulerTab: React.FC = () => {
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <button onClick={() => setShowDrawer(false)} className="bg-gray-100 py-4 rounded-2xl font-black text-gray-400 text-sm active:scale-95 transition-all">Cancel</button>
                 <button onClick={handleSaveTask} className="bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm active:scale-95 shadow-lg shadow-emerald-100 transition-all">{editingTask ? 'Save' : 'Deploy'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Focus Mode Modal */}
+      {showFocusModal && (
+        <div className="fixed inset-0 bg-indigo-950/40 backdrop-blur-md z-[300] flex items-center justify-center p-6">
+          <div className="bg-white/90 backdrop-blur-xl w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300 border border-white">
+            <div className="bg-indigo-600 p-8 text-white text-center">
+              <Target size={48} className="mx-auto mb-4 opacity-80" />
+              <h3 className="text-xl font-black">Subject Focus</h3>
+              <p className="text-xs font-bold opacity-60 uppercase tracking-widest mt-1">Intense Training Mode</p>
+            </div>
+            <div className="p-8 space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Subject 1</label>
+                  <select 
+                    value={focusSubs[0]}
+                    onChange={e => setFocusSubs([e.target.value, focusSubs[1]])}
+                    className="w-full bg-white/50 border border-gray-100 p-4 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-indigo-100 transition-all shadow-sm appearance-none"
+                  >
+                    <option value="">Select Subject</option>
+                    {subjects.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Subject 2 (Optional)</label>
+                  <select 
+                    value={focusSubs[1]}
+                    onChange={e => setFocusSubs([focusSubs[0], e.target.value])}
+                    className="w-full bg-white/50 border border-gray-100 p-4 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-indigo-100 transition-all shadow-sm appearance-none"
+                  >
+                    <option value="">Select Subject</option>
+                    {subjects.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-indigo-700 uppercase">Focus Duration</label>
+                  <span className="text-sm font-black text-indigo-600">{focusDays} Days</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="1" max="14" step="1"
+                  value={focusDays}
+                  onChange={e => setFocusDays(parseInt(e.target.value))}
+                  className="w-full accent-indigo-600 h-2 bg-indigo-200 rounded-full appearance-none cursor-pointer"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button 
+                  onClick={() => {
+                    const validSubs = focusSubs.filter(s => s !== '');
+                    if (validSubs.length > 0) {
+                      setFocusSubjects(validSubs, focusDays);
+                      setShowFocusModal(false);
+                    }
+                  }} 
+                  className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 active:scale-95 transition-all"
+                >
+                  ACTIVATE FOCUS
+                </button>
+                <button onClick={() => setShowFocusModal(false)} className="w-full py-3 text-gray-400 text-[10px] font-black uppercase tracking-[0.2em]">Cancel</button>
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Home, Calendar, RefreshCw, BarChart2, Settings, Flame, Star, Scroll } from 'lucide-react';
+import { Home, Calendar, RefreshCw, BarChart2, Settings, Flame, Star, Scroll, GraduationCap } from 'lucide-react';
 import { useApp } from '../state';
 import { Tab } from '../types';
 
@@ -25,6 +25,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navItems = [
     { icon: <Home size={22} />, label: 'Home', value: Tab.HOME },
     { icon: <Calendar size={22} />, label: 'Plan', value: Tab.SCHEDULER },
+    { icon: <GraduationCap size={22} />, label: 'Exam', value: Tab.EXAM },
     { icon: <RefreshCw size={22} />, label: 'Spaced', value: Tab.SPACED },
     { icon: <Scroll size={22} />, label: 'Sensei', value: Tab.SENSEI },
     { icon: <BarChart2 size={22} />, label: 'Stats', value: Tab.ANALYTICS },

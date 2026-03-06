@@ -8,6 +8,7 @@ import SpacedTab from './components/SpacedTab';
 import AnalyticsTab from './components/AnalyticsTab';
 import SettingsTab from './components/SettingsTab';
 import QuoteTab from './components/QuoteTab';
+import ExamPlannerTab from './components/ExamPlannerTab';
 import { Tab, Task } from './types';
 import PandaMascot from './components/PandaMascot';
 import { User, ArrowRight, Loader2, Key, ShieldCheck, LogIn, UserPlus, AlertCircle } from 'lucide-react';
@@ -374,6 +375,7 @@ const AppContent: React.FC = () => {
       case Tab.SENSEI: return <QuoteTab />;
       case Tab.ANALYTICS: return <AnalyticsTab />;
       case Tab.SETTINGS: return <SettingsTab />;
+      case Tab.EXAM: return <ExamPlannerTab />;
       default: return <HomeTab />;
     }
   };
@@ -392,7 +394,7 @@ const AppContent: React.FC = () => {
       <div className="h-full overflow-y-auto no-scrollbar pt-4">
         {renderTab()}
       </div>
-      {(activeTab === Tab.HOME || activeTab === Tab.SETTINGS || activeTab === Tab.SENSEI) && <PandaMascot size="small" />}
+      {(activeTab === Tab.HOME || activeTab === Tab.SETTINGS || activeTab === Tab.SENSEI || activeTab === Tab.EXAM) && <PandaMascot size="small" />}
       {activeAlarm && <AlarmOverlay alarm={activeAlarm} onTaken={handleTaken} />}
     </Layout>
   );

@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Task, UserStats, CategoryType, PandaState, Tab, MainTask, UserAccount, UserVaultData } from './types';
+import { Task, UserStats, CategoryType, PandaState, Tab, MainTask, UserAccount, UserVaultData, ExamPlan } from './types';
 
 interface AppContextType {
   tasks: Task[];
@@ -42,6 +42,12 @@ interface AppContextType {
   startDate: string;
   storageType: 'FOLDER' | 'BROWSER' | 'NONE';
   vaultFiles: string[];
+  examPlans: ExamPlan[];
+  addExamPlan: (plan: ExamPlan) => void;
+  updateExamPlan: (id: string, updates: Partial<ExamPlan>) => void;
+  deleteExamPlan: (id: string) => void;
+  markTopicComplete: (planId: string, topicId: string) => void;
+  setFocusSubjects: (subjects: string[], days: number) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -127,9 +133,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [pandaState, setPandaState] = useState<PandaState>('IDLE');
   const [activeTab, setActiveTab] = useState<Tab>(Tab.HOME);
   const [schedulerDate, setSchedulerDate] = useState(new Date());
+  const [examPlans, setExamPlans] = useState<ExamPlan[]>([]);
 
   const setMainTask = useCallback((name: string, date: string) => {
     setStats(prev => ({ ...prev, mainTask: { name, targetDate: date } }));
+  }, []);
+
+  const setFocusSubjects = useCallback((subjects: string[], days: number) => {
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + days);
+    const focusData = subjects.map(s => ({ subject: s, endDate: endDate.toISOString() }));
+    setStats(prev => ({ ...prev, focusSubjects: focusData }));
   }, []);
 
   const setDailyGoal = useCallback((goal: string) => {
@@ -176,6 +190,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHydration(data.hydration || 0);
     setSleepConfig(data.sleepConfig || { bedtime: "22:00", duration: 8 });
     setRemindersEnabled(data.remindersEnabled !== undefined ? data.remindersEnabled : true);
+    setExamPlans(data.examPlans || []);
   };
 
   const loadUserData = async (username: string) => {
@@ -211,7 +226,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       stats,
       hydration,
       sleepConfig,
-      remindersEnabled
+      remindersEnabled,
+      examPlans
     };
     await vaultDB.saveVault(currentUser, dataToSave);
   }, [currentUser, isInitialized, userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled]);
@@ -265,7 +281,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const exportData = () => {
     if (!currentUser) return;
     const dataToSave = {
-      userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled
+      userName, userLocation, startDate, tasks, stats, hydration, sleepConfig, remindersEnabled, examPlans
     };
     const blob = new Blob([JSON.stringify(dataToSave, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -396,6 +412,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateTask = useCallback((id: string, updates: Partial<Task>) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   }, []);
+
+  const addExamPlan = useCallback((plan: ExamPlan) => {
+    setExamPlans(prev => {
+      // deactivate all others if this one is active
+      const updated = plan.isActive
+        ? prev.map(p => ({ ...p, isActive: false }))
+        : [...prev];
+      return [...updated, plan];
+    });
+  }, []);
+
+  const updateExamPlan = useCallback((id: string, updates: Partial<ExamPlan>) => {
+    setExamPlans(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  }, []);
+
+  const deleteExamPlan = useCallback((id: string) => {
+    setExamPlans(prev => {
+      const plan = prev.find(p => p.id === id);
+      if (plan) {
+        // also delete all scheduled tasks that this plan created
+        plan.scheduledTasks.forEach(taskId => deleteTask(taskId));
+      }
+      return prev.filter(p => p.id !== id);
+    });
+  }, [deleteTask]);
+
+  const markTopicComplete = useCallback((planId: string, topicId: string) => {
+    setExamPlans(prev => prev.map(p => {
+      if (p.id !== planId) return p;
+      return {
+        ...p,
+        topics: p.topics.map(t =>
+          t.id === topicId ? { ...t, completed: true } : t
+        )
+      };
+    }));
+  }, []);
   
   const copySchedule = useCallback((source: string, target: string, ids: string[]) => {
     const sourceTasks = tasks.filter(t => new Date(t.startTime).toLocaleDateString('en-CA') === source && ids.includes(t.id) && !t.isQuick && !t.isSpacedRepetition && !t.isMedicine);
@@ -487,7 +540,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userName, setUserName, remindersEnabled, setRemindersEnabled,
       schedulerDate, setSchedulerDate, setMainTask, setDailyGoal, isInitialized,
       currentUser, login, signup, logout, exportData, importData, clearAllData,
-      userLocation, startDate, storageType, vaultFiles
+      userLocation, startDate, storageType, vaultFiles,
+      examPlans, addExamPlan, updateExamPlan, deleteExamPlan, markTopicComplete,
+      setFocusSubjects
     }}>
       {children}
     </AppContext.Provider>
