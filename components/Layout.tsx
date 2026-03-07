@@ -114,28 +114,30 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </div>
 
       {/* --- MOBILE: Bottom Navigation Bar --- */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 h-20 bg-white/40 backdrop-blur-2xl border-t border-white/20 flex items-center justify-around px-2 z-50">
-        {navItems.map((item) => {
-          const isActive = activeTab === item.value;
-          return (
-            <button
-              key={item.value}
-              onClick={() => setActiveTab(item.value)}
-              className="flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all"
-            >
-              <div className={`relative px-5 py-1.5 rounded-2xl transition-all duration-300 ${
-                isActive ? 'bg-emerald-100 text-emerald-900 shadow-sm' : 'text-gray-600'
-              }`}>
-                {item.icon}
-              </div>
-              <span className={`text-[9px] font-black uppercase tracking-tighter ${
-                isActive ? 'text-emerald-900' : 'text-gray-500 opacity-60'
-              }`}>
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 h-20 bg-white/40 backdrop-blur-2xl border-t border-white/20 flex items-center overflow-x-auto no-scrollbar px-4 z-50">
+        <div className="flex items-center justify-between min-w-full">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.value;
+            return (
+              <button
+                key={item.value}
+                onClick={() => setActiveTab(item.value)}
+                className="flex flex-col items-center justify-center min-w-[64px] h-full gap-1 transition-all"
+              >
+                <div className={`relative px-5 py-1.5 rounded-2xl transition-all duration-300 ${
+                  isActive ? 'bg-emerald-100 text-emerald-900 shadow-sm' : 'text-gray-600'
+                }`}>
+                  {item.icon}
+                </div>
+                <span className={`text-[9px] font-black uppercase tracking-tighter ${
+                  isActive ? 'text-emerald-900' : 'text-gray-500 opacity-60'
+                }`}>
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
     </div>
   );

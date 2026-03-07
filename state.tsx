@@ -382,10 +382,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const idx = prev.findIndex(t => t.id === id);
       if (idx === -1) return prev;
       const isNowCompleted = !prev[idx].completed;
+      const task = prev[idx];
       const updated = [...prev];
       updated[idx] = { ...prev[idx], completed: isNowCompleted };
+      
       if (isNowCompleted) {
         addXP(50);
+        
+        // SYNC: If this task matches a topic in an active exam plan, mark it complete
+        setExamPlans(plans => plans.map(p => {
+          if (!p.isActive) return p;
+          const topic = p.topics.find(t => task.name === t.name || task.name.startsWith(t.name));
+          if (topic && !topic.completed) {
+            return {
+              ...p,
+              topics: p.topics.map(t => t.id === topic.id ? { ...t, completed: true } : t)
+            };
+          }
+          return p;
+        }));
+
         if (prev[idx].isSpacedRepetition) {
           const step = prev[idx].repetitionStep || 0;
           if (step < SPACED_INTERVALS.length) {

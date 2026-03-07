@@ -372,7 +372,7 @@ const ExamPlannerTab: React.FC = () => {
                 <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Subject Priority</h3>
               </div>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-4 mb-2">Set the order of subjects for schedule generation</p>
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-[400px] overflow-y-auto no-scrollbar px-1">
                 {subjectPriority.map((sub, idx) => (
                   <div key={sub} className="flex items-center gap-4 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm group hover:border-emerald-200 transition-all">
                     <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-emerald-50 text-emerald-600 font-black text-sm shadow-inner">{idx + 1}</div>
@@ -564,9 +564,7 @@ const ExamPlannerTab: React.FC = () => {
       return true;
     });
 
-    const displaySubjects = subjectPriority.filter(sub => 
-      !currentFocuses || currentFocuses.length === 0 || currentFocuses.some(f => f.subject === sub)
-    );
+    const displaySubjects = subjectPriority;
 
     const completedSubjectsCount = displaySubjects.filter(sub => {
       const subTopics = activePlan.topics.filter(t => t.subject === sub);
@@ -644,22 +642,22 @@ const ExamPlannerTab: React.FC = () => {
                       <h2 className="text-lg font-black mt-1 truncate max-w-[150px]">{focus.subject}</h2>
                     </div>
                     <div className="bg-white/20 p-2.5 rounded-2xl backdrop-blur-md">
-                      <Target size={20} />
+                      <GraduationCap size={20} />
                     </div>
                   </div>
                   <div className="space-y-2 relative z-10">
                     <div className="flex justify-between items-end">
                       <span className="text-[9px] font-black uppercase opacity-70">Topic Progress</span>
-                      <span className="text-xs font-black">{done} / {total} Topics</span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-xs font-black">{done} / {total} Topics</span>
+                        <span className="text-[10px] font-black bg-white/20 px-2 py-0.5 rounded-lg mt-1">{prog}%</span>
+                      </div>
                     </div>
                     <div className="w-full h-2.5 bg-white/20 rounded-full overflow-hidden p-0.5">
                       <div 
                         className="h-full bg-white rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(255,255,255,0.5)]"
                         style={{ width: `${prog}%` }}
                       />
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[8px] font-black opacity-60 uppercase tracking-tighter">Mastery: {prog}%</span>
                     </div>
                   </div>
                 </div>
@@ -691,9 +689,6 @@ const ExamPlannerTab: React.FC = () => {
                   <button 
                     onClick={() => {
                       toggleTask(task.id);
-                      // Also mark topic as complete in plan if it matches
-                      const topic = activePlan.topics.find(t => t.name === task.name || task.name.startsWith(t.name));
-                      if (topic && !task.completed) markTopicComplete(activePlan.id, topic.id);
                     }}
                     className={`p-3 rounded-2xl transition-all ${task.completed ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
                   >
@@ -721,7 +716,7 @@ const ExamPlannerTab: React.FC = () => {
             <div className="flex items-center gap-2">
               <BarChart3 size={18} className="text-indigo-600" />
               <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">
-                {currentFocuses && currentFocuses.length > 0 ? `Mastery: ${currentFocuses.map(f => f.subject).join(', ')}` : 'Subject Mastery'}
+                Subject Mastery
               </h3>
             </div>
             <div className="flex items-center gap-2">
